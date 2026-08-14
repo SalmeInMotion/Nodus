@@ -1,0 +1,25 @@
+{
+    "enable": true,
+    "load_package_once": true,
+    "version": "0.3.0",
+    "env":
+    [
+        {"CLAUDE_HOUDINI_ROOT": "C:/IA/Tools/Houdini/houdini-claude"},
+        {"HOUDINI_PATH":
+            [
+                {
+                    "value": "C:/IA/Tools/Houdini/houdini-claude",
+                    "method": "prepend"
+                }
+            ]
+        },
+        {"PYTHONPATH":
+            [
+                {
+                    "value": "C:/IA/Tools/Houdini/houdini-claude/python",
+                    "method": "prepend"
+                }
+            ]
+        }
+    ]
+}

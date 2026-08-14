@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pythonPanelDocument>
+  <!-- This file contains definitions of Python interfaces and the
+ interfaces menu.  It should not be hand-edited when it is being
+ used by the application.  Note, that two definitions of the
+ same interface or of the interfaces menu are not allowed
+ in a single file. -->
+  <interface name="claude_chat" label="Claude Chat" icon="MISC_python" showNetworkNavigationBar="false" help_url="">
+    <script><![CDATA[
+import claude_houdini.panel as _panel
+
+def onCreateInterface():
+    return _panel.create_widget()
+
+def onDestroyInterface():
+    _panel.on_destroy()
+
+def onNodePathChanged(node):
+    pass
+]]></script>
+    <help><![CDATA[Chat panel para interactuar con Claude desde Houdini.
+
+Tu suscripción de Claude Code se usa como backend vía el CLI `claude`.
+Escribe un prompt, Claude lee tu escena y puede crear/modificar nodos previa confirmación.
+]]></help>
+  </interface>
+</pythonPanelDocument>

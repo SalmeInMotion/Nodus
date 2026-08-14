@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<shelfDocument>
+  <!-- Shelf tools shipped with the claude_houdini package.
+       Drag the tool into any shelf for 1-click access. -->
+
+  <tool name="claude_chat_open" label="Claude Chat" icon="MISC_python">
+    <helpText><![CDATA[Open the Claude chat panel as a floating window.]]></helpText>
+    <script scriptType="python"><![CDATA[
+import hou
+
+name = "claude_chat"
+iface = hou.pypanel.interfaceByName(name)
+if iface is None:
+    hou.ui.displayMessage(
+        "Interface '" + name + "' not found. "
+        "Is the claude_houdini package loaded? "
+        "Check the JSON in OneDrive/Documentos/houdini21.0/packages/."
+    )
+else:
+    panel = hou.ui.curDesktop().createFloatingPanel(hou.paneTabType.PythonPanel)
+    panel.paneTabs()[0].setActiveInterface(iface)
+]]></script>
+  </tool>
+
+  <toolshelf name="claude_houdini" label="Claude">
+    <memberTool name="claude_chat_open"/>
+  </toolshelf>
+</shelfDocument>
