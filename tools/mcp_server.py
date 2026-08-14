@@ -1,4 +1,4 @@
-"""MCP adapter for the claude-houdini bridge.
+"""MCP adapter for the Nodus bridge.
 
 Exposes the HTTP bridge of a running Houdini as standard MCP tools, so ANY
 MCP-capable client — Claude Code, Gemini CLI, local agent frameworks — can see

@@ -1,4 +1,4 @@
-# claude-houdini
+# Nodus
 
 A chat panel embedded in Houdini, plus a local HTTP bridge that lets Claude —
 or any MCP client — see and drive your scene.
@@ -31,8 +31,8 @@ reverts a whole answer.
 ## Install
 
 ```powershell
-git clone <this-repo> claude-houdini
-cd claude-houdini
+git clone <this-repo> nodus
+cd nodus
 .\install.ps1
 ```
 
@@ -235,7 +235,7 @@ Documented in full in `python/claude_houdini/system_prompt.py`.
 ## Layout
 
 ```
-claude-houdini/
+nodus/
 ├── install.ps1                    # writes the package descriptor per version
 ├── package.json                   # template only — install.ps1 writes the real one
 ├── scripts/

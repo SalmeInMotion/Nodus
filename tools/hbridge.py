@@ -1,4 +1,4 @@
-"""Command-line client for the claude-houdini bridge.
+"""Command-line client for the Nodus bridge.
 
 Resolves the bridge url/token automatically from the session file that the
 server publishes on startup (.sessions/session.json), so no manual token
@@ -119,7 +119,7 @@ def resolve(root: str | None, url: str | None, token: str | None,
     elif not sessions:
         raise BridgeError(
             f"No live bridge found (looked in {_sessions_dir(root)}).\n"
-            "Is Houdini running with the claude-houdini package loaded?\n"
+            "Is Houdini running with the Nodus package loaded?\n"
             "Start the bridge manually from the Houdini Python Shell with:\n"
             "    from claude_houdini import server; server.start()"
         )
@@ -190,10 +190,10 @@ def cmd_run(url: str, token: str, source: str) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Talk to a running Houdini through the claude-houdini bridge.",
+        description="Talk to a running Houdini through the Nodus bridge.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--root", help="claude-houdini install dir (finds the session files)")
+    parser.add_argument("--root", help="Nodus install dir (finds the session files)")
     parser.add_argument("--url", help="override the bridge url")
     parser.add_argument("--token", help="override the bearer token")
     parser.add_argument("--port", type=int,

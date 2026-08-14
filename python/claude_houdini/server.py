@@ -186,7 +186,7 @@ def _bind() -> ThreadingHTTPServer:
         _port = candidate
         return server
     raise OSError(
-        f"claude-houdini: no free port among {candidates} ({last_error}). "
+        f"Nodus: no free port among {candidates} ({last_error}). "
         "Another session may be using them; set CLAUDE_HOUDINI_PORT to pick one."
     )
 

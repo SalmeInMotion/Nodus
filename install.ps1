@@ -1,4 +1,4 @@
-# Installer for claude-houdini.
+# Installer for Nodus.
 # Writes the package descriptor into every detected Houdini user pref dir.
 #
 # The project layout is version-agnostic (code lives in <root>/python and is
