@@ -1,14 +1,15 @@
 {
+    "//": "TEMPLATE — not loaded from here. install.ps1 writes the real descriptor into each Houdini pref dir with __PROJECT_ROOT__ replaced by this project's path. Edit install.ps1, not this file.",
     "enable": true,
     "load_package_once": true,
-    "version": "0.3.0",
+    "version": "0.4.0",
     "env":
     [
-        {"CLAUDE_HOUDINI_ROOT": "C:/IA/Tools/Houdini/houdini-claude"},
+        {"CLAUDE_HOUDINI_ROOT": "__PROJECT_ROOT__"},
         {"HOUDINI_PATH":
             [
                 {
-                    "value": "C:/IA/Tools/Houdini/houdini-claude",
+                    "value": "__PROJECT_ROOT__",
                     "method": "prepend"
                 }
             ]
@@ -16,7 +17,7 @@
         {"PYTHONPATH":
             [
                 {
-                    "value": "C:/IA/Tools/Houdini/houdini-claude/python",
+                    "value": "__PROJECT_ROOT__/python",
                     "method": "prepend"
                 }
             ]

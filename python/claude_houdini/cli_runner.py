@@ -5,10 +5,10 @@ stream-json lines on stdin; events come back on stdout and are re-emitted as Qt
 signals for the panel.
 
 Why persistent: the previous design spawned `claude --print` per prompt, paying
-process boot plus a full system-prompt round trip every turn — the latency Ivan
-kept noticing. With `--input-format stream-json` the CLI keeps reading turns off
-stdin, so the conversation state lives in the process and there is no
-`--resume` dance.
+process boot plus a full system-prompt round trip every turn, which was
+noticeable on every single answer. With `--input-format stream-json` the CLI
+keeps reading turns off stdin, so the conversation state lives in the process
+and there is no `--resume` dance.
 
 `--include-partial-messages` adds `stream_event` frames carrying `text_delta`
 chunks, which is what makes the answer appear as it is written.
@@ -100,8 +100,8 @@ class ClaudeWorker(QtCore.QObject):
             was_active = self._turn_active
             self._kill_process()
         if was_active:
-            self.event.emit(StreamEvent("info", {"message": "cancelado"}))
-            self._end_turn(False, "cancelado")
+            self.event.emit(StreamEvent("info", {"message": "cancelled"}))
+            self._end_turn(False, "cancelled")
 
     def shutdown(self) -> None:
         with self._lock:
@@ -124,19 +124,19 @@ class ClaudeWorker(QtCore.QObject):
         except (BrokenPipeError, OSError) as e:
             # Process died between turns (crash, or the user killed it).
             self.event.emit(StreamEvent("error", {
-                "message": f"El proceso `claude` se cerró ({e}). Reintenta: se relanzará solo."
+                "message": f"The `claude` process exited ({e}). Try again - it will relaunch itself."
             }))
             with self._lock:
                 self._kill_process()
-            self._end_turn(False, "proceso caído")
+            self._end_turn(False, "process died")
         except FileNotFoundError:
             self.event.emit(StreamEvent("error", {
-                "message": "No se encontró el binario `claude`. Debe estar en el PATH del "
-                           f"proceso de Houdini, o setea {config.CLAUDE_CLI_ENV} con su ruta."
+                "message": "Could not find the `claude` binary. It must be on the PATH of the "
+                           f"Houdini process, or set {config.CLAUDE_CLI_ENV} to its full path."
             }))
             self._end_turn(False, "binary-not-found")
         except Exception as e:
-            self.event.emit(StreamEvent("error", {"message": f"Excepción: {e!r}"}))
+            self.event.emit(StreamEvent("error", {"message": f"Exception: {e!r}"}))
             self._end_turn(False, str(e))
 
     # ---------- process lifecycle ----------
@@ -181,7 +181,7 @@ class ClaudeWorker(QtCore.QObject):
             name="claude-stderr", daemon=True).start()
 
         self.event.emit(StreamEvent("info", {
-            "message": f"proceso claude iniciado ({config.model()})"
+            "message": f"claude process started ({config.model()})"
         }))
 
     def _kill_process(self) -> None:
@@ -228,8 +228,8 @@ class ClaudeWorker(QtCore.QObject):
     def _on_watchdog(self) -> None:
         if self._turn_active:
             self.event.emit(StreamEvent("info", {
-                "message": f"sigue trabajando ({_WATCHDOG_S}s sin terminar) — "
-                           "puedes cancelar si se ha atascado"
+                "message": f"still working ({_WATCHDOG_S}s without finishing) - "
+                           "cancel it if it looks stuck"
             }))
 
     # ---------- reader threads ----------
@@ -260,7 +260,7 @@ class ClaudeWorker(QtCore.QObject):
         # stdout closed => process gone.
         if self._turn_active:
             self.event.emit(StreamEvent("error", {
-                "message": "El proceso `claude` terminó inesperadamente."
+                "message": "The `claude` process exited unexpectedly."
             }))
             self._end_turn(False, "proceso terminado")
 
@@ -278,7 +278,7 @@ class ClaudeWorker(QtCore.QObject):
                 sid = evt.get("session_id")
                 if sid:
                     self._session_id = sid
-                    self.event.emit(StreamEvent("info", {"message": f"sesión: {sid}"}))
+                    self.event.emit(StreamEvent("info", {"message": f"session: {sid}"}))
             return
 
         if t == "assistant":

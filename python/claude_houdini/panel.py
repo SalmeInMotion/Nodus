@@ -1,11 +1,13 @@
 """PySide6 chat panel: the UI users interact with from Houdini's Python Panel.
 
-v2 changes:
-- "Modo dev" toggle: when off (default), filters noisy CLI events and
-  aggressively truncates tool_use / tool_result blocks with click-to-expand.
-- Bearer token is masked in the visible chat (still works in real requests).
-- Spurious tracebacks from run_python's eval/exec dual-attempt no longer
-  appear (handled in tools.py).
+Notable behaviours:
+- Backend dropdown: Anthropic models (agentic, scene access) or a local Ollama
+  model (chat only). The answer is labelled with whichever one produced it.
+- "Dev" toggle: off by default, which filters noisy CLI events and truncates
+  tool calls/results to one line with click-to-expand.
+- The bearer token is masked everywhere it would otherwise be displayed.
+- Keyboard focus is forced down into the text box; Houdini gives it to the
+  panel's root widget, where keystrokes would be silently dropped.
 """
 
 from __future__ import annotations
@@ -33,7 +35,7 @@ _TRUNC_TEXT_EXPANDED = 5000  # max we will ever show inside the expand modal
 # Regex patterns of `info` events we hide in standard mode.
 _NOISY_INFO_PATTERNS = [
     re.compile(r"^\$\s+claude\s"),       # the full spawn command line
-    re.compile(r"^sesi[oó]n:\s"),        # session uuid
+    re.compile(r"^session:\s"),        # session uuid
     re.compile(r"^\[evt\s"),              # unknown / passthrough events
     re.compile(r"^\[raw\]\s"),            # un-parseable JSON lines
     re.compile(r"^\[rate limit\]"),       # fires ~once per turn, pure noise
@@ -119,7 +121,7 @@ class ChatPanel(QtWidgets.QWidget):
 
         # Top status bar
         bar = QtWidgets.QHBoxLayout()
-        self._status = QtWidgets.QLabel("Iniciando…")
+        self._status = QtWidgets.QLabel("Starting…")
         self._status.setStyleSheet("color: #888;")
         bar.addWidget(self._status)
         bar.addStretch(1)
@@ -128,46 +130,46 @@ class ChatPanel(QtWidgets.QWidget):
         for label, _backend, _model in _BACKENDS:
             self._backend_combo.addItem(label)
         self._backend_combo.setToolTip(
-            "Opus 5 / Sonnet: agénticos, ven y modifican tu escena (consumen tokens).\n"
-            "Qwen3.6 local: corre en tu GPU vía Ollama, gratis y sin conexión, pero\n"
-            "SIN acceso a la escena — solo preguntas de VEX, nodos y sintaxis."
+            "Opus 5 / Sonnet: agentic, they see and modify your scene (uses tokens).\n"
+            "Qwen3.6 local: runs on your GPU via Ollama, free and offline, but\n"
+            "with NO scene access - VEX, node and syntax questions only."
         )
         self._backend_combo.setCurrentIndex(self._initial_backend_index())
         self._backend_combo.currentIndexChanged.connect(self._on_backend_changed)
         bar.addWidget(self._backend_combo)
 
-        self._auto_chk = QtWidgets.QCheckBox("Modo autónomo")
+        self._auto_chk = QtWidgets.QCheckBox("Autonomous")
         self._auto_chk.setToolTip(
-            "Si está activo, Claude aplica cambios destructivos (crear/modificar/borrar nodos, "
-            "run_python) sin pedirte confirmación. Las acciones siguen apareciendo en el log."
+            "When on, destructive changes (create/modify/delete nodes, run_python) are "
+            "applied without asking. They still show up in the log."
         )
         self._auto_chk.setChecked(state.auto_mode())
         self._auto_chk.toggled.connect(self._on_auto_toggled)
         bar.addWidget(self._auto_chk)
 
-        self._dev_chk = QtWidgets.QCheckBox("Modo dev")
+        self._dev_chk = QtWidgets.QCheckBox("Dev")
         self._dev_chk.setToolTip(
-            "Si está activo, muestra eventos crudos del CLI (comando de arranque, rate limits, "
-            "tracebacks completos) y NO trunca tool calls ni results. Útil para debug del runner."
+            "When on, shows raw CLI events (spawn command, rate limits, full tracebacks) "
+            "and does NOT truncate tool calls or results. Useful to debug the runner."
         )
         self._dev_chk.setChecked(state.dev_mode())
         self._dev_chk.toggled.connect(self._on_dev_toggled)
         bar.addWidget(self._dev_chk)
 
         self._restart_btn = QtWidgets.QToolButton()
-        self._restart_btn.setText("Reiniciar server")
-        self._restart_btn.setToolTip("Si el HTTP server interno se cayó, púlsalo para volver a arrancarlo.")
+        self._restart_btn.setText("Restart server")
+        self._restart_btn.setToolTip("If the internal HTTP server died, press this to bring it back up.")
         self._restart_btn.clicked.connect(self._on_restart_server)
         bar.addWidget(self._restart_btn)
 
         self._reset_btn = QtWidgets.QToolButton()
-        self._reset_btn.setText("Nueva sesión")
-        self._reset_btn.setToolTip("Olvidar el historial actual y empezar una conversación nueva.")
+        self._reset_btn.setText("New session")
+        self._reset_btn.setToolTip("Forget the current history and start a fresh conversation.")
         self._reset_btn.clicked.connect(self._on_reset_session)
         bar.addWidget(self._reset_btn)
 
         self._cancel_btn = QtWidgets.QToolButton()
-        self._cancel_btn.setText("Cancelar")
+        self._cancel_btn.setText("Cancel")
         self._cancel_btn.setEnabled(False)
         self._cancel_btn.clicked.connect(self._on_cancel)
         bar.addWidget(self._cancel_btn)
@@ -187,14 +189,14 @@ class ChatPanel(QtWidgets.QWidget):
 
         # Input area
         self._input = _SubmittablePlainTextEdit()
-        self._input.setPlaceholderText("Escribe tu prompt aquí (Ctrl+Enter para enviar)…")
+        self._input.setPlaceholderText("Type your prompt here (Ctrl+Enter to send)…")
         self._input.setFixedHeight(96)
         self._input.submit_requested.connect(self._on_submit)
         layout.addWidget(self._input)
 
         btn_row = QtWidgets.QHBoxLayout()
         btn_row.addStretch(1)
-        self._send_btn = QtWidgets.QPushButton("Enviar  (Ctrl+Enter)")
+        self._send_btn = QtWidgets.QPushButton("Send  (Ctrl+Enter)")
         self._send_btn.clicked.connect(self._on_submit)
         btn_row.addWidget(self._send_btn)
         layout.addLayout(btn_row)
@@ -206,7 +208,7 @@ class ChatPanel(QtWidgets.QWidget):
         self._input.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.setFocusProxy(self._input)
 
-        self._append_system("Panel inicializado. Espera al servidor…")
+        self._append_system("Panel initialised. Waiting for the server…")
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:  # noqa: N802
         """Safety net for the focus quirk above.
@@ -251,7 +253,7 @@ class ChatPanel(QtWidgets.QWidget):
     def _on_backend_changed(self, index: int) -> None:
         if self._busy:
             QtWidgets.QMessageBox.information(
-                self, "Espera", "Hay una respuesta en curso. Cancélala primero."
+                self, "Busy", "An answer is in progress. Cancel it first."
             )
             self._backend_combo.blockSignals(True)
             self._backend_combo.setCurrentIndex(self._initial_backend_index())
@@ -265,8 +267,8 @@ class ChatPanel(QtWidgets.QWidget):
         if backend == "local":
             self._ensure_local_worker()
             self._append_system(
-                f"Backend: <b>{label}</b> — en tu GPU, sin coste y sin acceso a la escena. "
-                "Para que vea o toque nodos, vuelve a Opus/Sonnet."
+                f"Backend: <b>{label}</b> - on your GPU, free, with no scene access. "
+                "Switch back to Opus/Sonnet for it to see or touch nodes."
             )
             return
 
@@ -277,7 +279,7 @@ class ChatPanel(QtWidgets.QWidget):
         if self._worker is not None:
             self._worker.reset_session()
         self._append_system(
-            f"Backend: <b>{label}</b>. Se reinicia la conversación (proceso nuevo)."
+            f"Backend: <b>{label}</b>. The conversation restarts (new process)."
         )
 
     def _ensure_local_worker(self):
@@ -305,9 +307,9 @@ class ChatPanel(QtWidgets.QWidget):
         try:
             url, token = server.start()
         except OSError as e:
-            self._append_error(f"No se pudo arrancar el servidor HTTP: {e}\n"
-                               "Probablemente el puerto está ocupado. "
-                               "Setea CLAUDE_HOUDINI_PORT a otro valor y reinicia Houdini.")
+            self._append_error(f"Could not start the HTTP server: {e}\n"
+                               "The port is probably taken. Set CLAUDE_HOUDINI_PORT "
+                               "to another value and restart Houdini.")
             return
 
         self._bearer = token
@@ -325,10 +327,10 @@ class ChatPanel(QtWidgets.QWidget):
         self.submit_claude.connect(self._worker.send)
         self._thread.start()
 
-        self._status.setText(f"✓ Servidor: {url} · sesión nueva")
+        self._status.setText(f"✓ Server: {url} · new session")
         self._append_system(
-            f"Servidor escuchando en <code>{url}</code>. "
-            "Claude usa este endpoint para leer/modificar tu escena."
+            f"Server listening on <code>{url}</code>. "
+            "Claude uses this endpoint to read and modify your scene."
         )
 
     def shutdown(self) -> None:
@@ -380,39 +382,39 @@ class ChatPanel(QtWidgets.QWidget):
         try:
             url, token = server.start()
             self._bearer = token
-            self._append_system(f"Servidor reiniciado en <code>{url}</code>.")
+            self._append_system(f"Server restarted on <code>{url}</code>.")
             # New token => the running `claude` process holds a stale one, so
             # hand over the rebuilt prompt; the worker restarts itself.
             if self._worker is not None:
                 self._worker.set_system_prompt(system_prompt.build(url, token))
         except Exception as e:
-            self._append_error(f"No se pudo reiniciar el servidor: {e}")
+            self._append_error(f"Could not restart the server: {e}")
 
     @QtCore.Slot(bool)
     def _on_auto_toggled(self, checked: bool) -> None:
         state.set_auto_mode(checked)
         if checked:
             self._append_system(
-                "⚠ Modo autónomo ACTIVADO. Claude aplicará cambios sin pedir confirmación."
+                "⚠ Autonomous mode ON. Changes will be applied without asking."
             )
         else:
             self._append_system(
-                "Modo autónomo desactivado. Volverá a pedir confirmación para cambios destructivos."
+                "Autonomous mode off. Destructive changes will ask for confirmation again."
             )
 
     @QtCore.Slot(bool)
     def _on_dev_toggled(self, checked: bool) -> None:
         state.set_dev_mode(checked)
         self._append_system(
-            "Modo dev ACTIVADO — verás eventos crudos del CLI." if checked
-            else "Modo dev desactivado — vista compacta."
+            "Dev mode ON - raw CLI events are shown." if checked
+            else "Dev mode off - compact view."
         )
 
     @QtCore.Slot()
     def _on_reset_session(self) -> None:
         if self._busy:
             QtWidgets.QMessageBox.information(
-                self, "Espera", "Hay una respuesta en curso. Cancélala primero."
+                self, "Busy", "An answer is in progress. Cancel it first."
             )
             return
         for worker in (self._worker, self._local_worker):
@@ -421,8 +423,8 @@ class ChatPanel(QtWidgets.QWidget):
         self._chat.clear()
         self._expandable.clear()
         self._streaming = False
-        self._append_system("Sesión reiniciada. Sin contexto previo.")
-        self._status.setText(self._status.text().split("·")[0].strip() + " · sesión nueva")
+        self._append_system("Session reset. No previous context.")
+        self._status.setText(self._status.text().split("·")[0].strip() + " · new session")
 
     @QtCore.Slot()
     def _on_cancel(self) -> None:
@@ -474,14 +476,14 @@ class ChatPanel(QtWidgets.QWidget):
             label = "Claude: " + (prompt[:40] + "…" if len(prompt) > 40 else prompt)
             tools.undo_begin(label)
         except Exception as e:
-            self._append_info(f"no pude abrir el grupo de undo: {e}")
+            self._append_info(f"could not open the undo group: {e}")
 
     def _end_undo_group(self) -> None:
         try:
             from . import tools
             tools.undo_end()
         except Exception as e:
-            self._append_info(f"no pude cerrar el grupo de undo: {e}")
+            self._append_info(f"could not close the undo group: {e}")
 
     @QtCore.Slot(QtCore.QUrl)
     def _on_anchor_clicked(self, url: QtCore.QUrl) -> None:
@@ -521,7 +523,7 @@ class ChatPanel(QtWidgets.QWidget):
     # ---------- Rendering ----------
 
     def _append_user(self, text: str) -> None:
-        self._append_block("Tú", text, color="#7ab8ff")
+        self._append_block("You", text, color="#7ab8ff")
 
     def _append_assistant(self, text: str) -> None:
         if not text.strip():
@@ -603,12 +605,12 @@ class ChatPanel(QtWidgets.QWidget):
 
         # Standard mode: 1 line + expand link
         first_line = _summary_command(masked)
-        eid = self._register_expandable(f"→ {name} (completo)", masked)
+        eid = self._register_expandable(f"→ {name} (full)", masked)
         self._append_html(
             f"<span style='color:#cdb682;'>→ <b>{html.escape(name)}</b> "
             f"<span style='color:#a08a55;'>{html.escape(first_line)}</span> "
             f"<a href='claude://expand/{eid}' style='color:#6a8caf;"
-            f"text-decoration:none;font-size:9pt;'>[ver completo]</a></span>"
+            f"text-decoration:none;font-size:9pt;'>[show full]</a></span>"
         )
 
     def _append_tool_result(self, content: str, is_error: bool) -> None:
@@ -627,12 +629,12 @@ class ChatPanel(QtWidgets.QWidget):
 
         # Standard mode: 1-line summary + expand link
         summary = _result_summary(body, is_error)
-        eid = self._register_expandable(f"{header} (completo)", body)
+        eid = self._register_expandable(f"{header} (full)", body)
         self._append_html(
             f"<span style='color:{color};'>{html.escape(header)} "
             f"<span style='color:#9a9a9a;'>{html.escape(summary)}</span> "
             f"<a href='claude://expand/{eid}' style='color:#6a8caf;"
-            f"text-decoration:none;font-size:9pt;'>[ver completo]</a></span>"
+            f"text-decoration:none;font-size:9pt;'>[show full]</a></span>"
         )
 
     def _append_info(self, text: str) -> None:
@@ -655,11 +657,11 @@ class ChatPanel(QtWidgets.QWidget):
             return
         # Standard mode: error message in red, with expand for full traceback
         first = masked.splitlines()[0] if masked else "(error)"
-        eid = self._register_expandable("Error (completo)", masked)
+        eid = self._register_expandable("Error (full)", masked)
         self._append_html(
             f"<span style='color:#ff6464;'>⚠ {html.escape(first[:180])} "
             f"<a href='claude://expand/{eid}' style='color:#6a8caf;"
-            f"text-decoration:none;font-size:9pt;'>[ver completo]</a></span>"
+            f"text-decoration:none;font-size:9pt;'>[show full]</a></span>"
         )
 
     def _append_system(self, text_html: str) -> None:
@@ -668,7 +670,7 @@ class ChatPanel(QtWidgets.QWidget):
         )
 
     def _append_block(self, who: str, text: str, *, color: str) -> None:
-        # pre-wrap keeps indentation: Ivan pastes VEX in here, and plain HTML
+        # pre-wrap keeps indentation: people paste VEX in here, and plain HTML
         # would collapse every run of spaces into one.
         body = html.escape(text).replace("\n", "<br>")
         self._append_html(
@@ -689,7 +691,7 @@ class ChatPanel(QtWidgets.QWidget):
         self._send_btn.setEnabled(not busy)
         self._input.setReadOnly(busy)
         self._cancel_btn.setEnabled(busy)
-        self._send_btn.setText("Pensando…" if busy else "Enviar  (Ctrl+Enter)")
+        self._send_btn.setText("Thinking…" if busy else "Send  (Ctrl+Enter)")
 
     # ---------- Helpers ----------
 
@@ -737,7 +739,7 @@ def _summary_command(cmd: str) -> str:
 def _result_summary(body: str, is_error: bool) -> str:
     """Extract a one-line summary of a tool result body."""
     if not body:
-        return "(vacío)"
+        return "(empty)"
     # If it parses as our API JSON, give a meaningful summary
     body_strip = body.strip()
     if body_strip.startswith("{"):

@@ -2,8 +2,8 @@
 
 Deliberately *chat only*: no tools, no HTTP bridge, no access to the scene. A
 local 32-36B model is good for "what does this VEX do", "give me a wrangle that
-…", "which SOP handles X" — and hopeless at multi-step tool orchestration. Ivan
-picks the backend from the panel, so there is no auto-router guessing for him.
+…", "which SOP handles X" — and hopeless at multi-step tool orchestration. The
+backend is picked explicitly in the panel, so no auto-router has to guess.
 
 Costs no tokens and works offline.
 """
@@ -27,17 +27,28 @@ OLLAMA_URL = os.environ.get("CLAUDE_HOUDINI_OLLAMA", "http://127.0.0.1:11434")
 LOCAL_MODEL_ENV = "CLAUDE_HOUDINI_LOCAL_MODEL"
 LOCAL_MODEL_DEFAULT = "qwen3.6:latest"
 
-SYSTEM_PROMPT = """\
-Eres un asistente técnico de Houdini para Ivan, artista/TD de VFX (es-ES).
-Respondes preguntas de conocimiento: VEX, nodos SOP/LOP/DOP, expresiones,
-Python de Houdini (hou.*), formatos (Alembic, USD), y flujos de trabajo.
 
-IMPORTANTE: en este modo NO tienes acceso a la escena de Houdini. No puedes
-leer ni modificar nodos. Si la pregunta requiere inspeccionar o tocar la escena,
-dilo claramente y sugiere cambiar al modelo de Anthropic en el desplegable.
+def _system_prompt() -> str:
+    """Built per call so a change of language/name needs no Houdini restart."""
+    from .system_prompt import LANGUAGE_ENV
 
-Responde en español, conciso y al grano. Da el código directamente. No inventes
-nombres de nodos ni de funciones VEX: si no estás seguro, dilo.
+    language = os.environ.get(LANGUAGE_ENV, "").strip()
+    lang_line = (f"Always reply in {language}."
+                 if language else
+                 "Reply in the same language the user writes to you in.")
+
+    return f"""\
+You are a technical Houdini assistant for an experienced VFX artist/TD.
+You answer knowledge questions: VEX, SOP/LOP/DOP nodes, expressions, Houdini
+Python (`hou`), formats (Alembic, USD) and workflows.
+
+IMPORTANT: in this mode you have NO access to the Houdini scene. You cannot
+read or modify nodes. If a question requires inspecting or touching the scene,
+say so plainly and suggest switching to one of the Anthropic models in the
+dropdown.
+
+{lang_line} Be concise and to the point. Give the code directly. Do not invent
+node names or VEX functions: if you are not sure, say so.
 """
 
 
@@ -107,12 +118,12 @@ class LocalWorker(QtCore.QObject):
             self._chat(prompt)
         except urllib.error.URLError as e:
             self.event.emit(StreamEvent("error", {
-                "message": f"No pude hablar con Ollama en {OLLAMA_URL} ({e.reason}). "
-                           "¿Está arrancado? Pruébalo con: ollama list"
+                "message": f"Could not reach Ollama at {OLLAMA_URL} ({e.reason}). "
+                           "Is it running? Check with: ollama list"
             }))
             self.finished.emit(False, "ollama-unreachable")
         except Exception as e:
-            self.event.emit(StreamEvent("error", {"message": f"Excepción: {e!r}"}))
+            self.event.emit(StreamEvent("error", {"message": f"Exception: {e!r}"}))
             self.finished.emit(False, str(e))
         finally:
             self._active = False
@@ -125,7 +136,7 @@ class LocalWorker(QtCore.QObject):
 
         payload = {
             "model": model,
-            "messages": [{"role": "system", "content": SYSTEM_PROMPT}] + self._history,
+            "messages": [{"role": "system", "content": _system_prompt()}] + self._history,
             "stream": True,
             "think": False,
         }
@@ -136,7 +147,7 @@ class LocalWorker(QtCore.QObject):
             method="POST",
         )
 
-        self.event.emit(StreamEvent("info", {"message": f"modelo local: {model}"}))
+        self.event.emit(StreamEvent("info", {"message": f"local model: {model}"}))
 
         answer: list[str] = []
         thinking = _ThinkFilter()
@@ -144,8 +155,8 @@ class LocalWorker(QtCore.QObject):
         with urllib.request.urlopen(req, timeout=600) as resp:
             for raw in resp:
                 if self._cancelled.is_set():
-                    self.event.emit(StreamEvent("info", {"message": "cancelado"}))
-                    self.finished.emit(False, "cancelado")
+                    self.event.emit(StreamEvent("info", {"message": "cancelled"}))
+                    self.finished.emit(False, "cancelled")
                     return
                 raw = raw.strip()
                 if not raw:

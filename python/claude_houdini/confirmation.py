@@ -14,10 +14,10 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 
 def _build_message(tool: str, summary: str, details: Optional[str]) -> str:
-    body = [f"<b>Claude quiere ejecutar:</b> <code>{tool}</code>", "", summary]
+    body = [f"<b>Claude wants to run:</b> <code>{tool}</code>", "", summary]
     if details:
         body.append("")
-        body.append("<details><summary>Detalles</summary><pre>")
+        body.append("<details><summary>Details</summary><pre>")
         body.append(_escape(details))
         body.append("</pre></details>")
     return "<br>".join(body)
@@ -34,7 +34,7 @@ def _escape(text: str) -> str:
 def _show_modal(tool: str, summary: str, details: Optional[str]) -> bool:
     parent = QtWidgets.QApplication.activeWindow()
     dlg = QtWidgets.QDialog(parent)
-    dlg.setWindowTitle("Claude · Confirmar acción")
+    dlg.setWindowTitle("Claude - Confirm action")
     dlg.setMinimumWidth(560)
     dlg.setWindowFlags(dlg.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
 
@@ -59,8 +59,8 @@ def _show_modal(tool: str, summary: str, details: Optional[str]) -> bool:
         layout.addWidget(det)
 
     btns = QtWidgets.QDialogButtonBox()
-    allow_btn = btns.addButton("Aplicar", QtWidgets.QDialogButtonBox.AcceptRole)
-    deny_btn = btns.addButton("Cancelar", QtWidgets.QDialogButtonBox.RejectRole)
+    allow_btn = btns.addButton("Apply", QtWidgets.QDialogButtonBox.AcceptRole)
+    deny_btn = btns.addButton("Cancel", QtWidgets.QDialogButtonBox.RejectRole)
     allow_btn.setDefault(False)
     deny_btn.setDefault(True)
     layout.addWidget(btns)

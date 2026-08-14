@@ -25,7 +25,8 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import hbridge  # noqa: E402  (same directory)
 
-# mcp SDK 2.x. The 1.x name for this class was mcp.server.fastmcp.FastMCP.
+# Requires the MCP SDK 2.x (`pip install "mcp>=2,<3"`). In 1.x this class was
+# mcp.server.fastmcp.FastMCP, so an unpinned install can break the import.
 from mcp.server import MCPServer  # noqa: E402
 
 mcp = MCPServer(

@@ -38,7 +38,7 @@ def capture(what: str = "viewport", width: int = 1400) -> dict:
       network  — the network editor pane, falling back to the full window
     """
     if what not in VALID_TARGETS:
-        raise ValueError(f"'what' debe ser uno de {VALID_TARGETS}, no {what!r}")
+        raise ValueError(f"'what' must be one of {VALID_TARGETS}, not {what!r}")
 
     CAPTURES_DIR.mkdir(parents=True, exist_ok=True)
     _prune_old()
@@ -54,13 +54,13 @@ def capture(what: str = "viewport", width: int = 1400) -> dict:
         widget = _network_widget()
         if widget is None:
             result = _capture_widget(_main_window(), path, width)
-            result["note"] = ("No pude aislar el Network Editor en esta versión; "
-                              "esta es la ventana completa de Houdini.")
+            result["note"] = ("Could not isolate the Network Editor in this version; "
+                              "this is the whole Houdini window.")
         else:
             result = _capture_widget(widget, path, width)
 
     result["what"] = what
-    result["hint"] = f"Usa la tool Read sobre {result['path']} para verla."
+    result["hint"] = f"Open {result['path']} with the Read tool to actually see it."
     return result
 
 
@@ -69,7 +69,7 @@ def capture(what: str = "viewport", width: int = 1400) -> dict:
 def _capture_viewport(path: Path, width: int) -> dict:
     viewer = _scene_viewer()
     if viewer is None:
-        raise RuntimeError("No hay ningún Scene Viewer abierto en la sesión.")
+        raise RuntimeError("No Scene Viewer open in this session.")
 
     settings = viewer.flipbookSettings().stash()
     frame = hou.frame()
@@ -92,7 +92,7 @@ def _capture_viewport(path: Path, width: int) -> dict:
 
     written = _resolve_written_file(path)
     if written is None:
-        raise RuntimeError(f"El flipbook no dejó ningún archivo en {path.parent}")
+        raise RuntimeError(f"The flipbook wrote no file into {path.parent}")
     return {"path": str(written).replace("\\", "/"), "frame": frame}
 
 
@@ -108,7 +108,7 @@ def _resolve_written_file(path: Path) -> Path | None:
 
 def _capture_widget(widget, path: Path, width: int) -> dict:
     if widget is None:
-        raise RuntimeError("No pude obtener la ventana de Houdini (¿sesión sin UI?).")
+        raise RuntimeError("Could not get the Houdini window (headless session?).")
 
     from PySide6 import QtCore
 
@@ -116,7 +116,7 @@ def _capture_widget(widget, path: Path, width: int) -> dict:
     if width and pixmap.width() > width:
         pixmap = pixmap.scaledToWidth(width, QtCore.Qt.SmoothTransformation)
     if not pixmap.save(str(path), "PNG"):
-        raise RuntimeError(f"No pude escribir el PNG en {path}")
+        raise RuntimeError(f"Could not write the PNG to {path}")
     return {"path": str(path).replace("\\", "/"),
             "width": pixmap.width(), "height": pixmap.height()}
 

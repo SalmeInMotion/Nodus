@@ -30,7 +30,7 @@ def scene_info() -> dict:
 def list_nodes(path: str = "/obj", recursive: bool = False, max_items: int = 500) -> dict:
     node = hou.node(path)
     if node is None:
-        raise ValueError(f"No existe el nodo en '{path}'")
+        raise ValueError(f"No node at '{path}'")
 
     out: list[dict] = []
     if recursive:
@@ -49,7 +49,7 @@ def list_nodes(path: str = "/obj", recursive: bool = False, max_items: int = 500
 def get_node(path: str, include_parms: bool = True, parm_limit: int = 80) -> dict:
     node = hou.node(path)
     if node is None:
-        raise ValueError(f"No existe el nodo en '{path}'")
+        raise ValueError(f"No node at '{path}'")
 
     info = _node_brief(node)
     info["inputs"] = [i.path() if i else None for i in node.inputs()]
@@ -118,7 +118,7 @@ def screenshot(what: str = "viewport", width: int = 1400,
         pane = _pane_of_type(hou.paneTabType.NetworkEditor)
         target = hou.node(node_path)
         if target is None:
-            raise ValueError(f"No existe el nodo en '{node_path}'")
+            raise ValueError(f"No node at '{node_path}'")
         if pane is not None:
             pane.setPwd(target)
             if hou.selectedNodes():
@@ -138,7 +138,7 @@ def cook_errors(path: str = "/obj", recursive: bool = True,
     """
     root = hou.node(path)
     if root is None:
-        raise ValueError(f"No existe el nodo en '{path}'")
+        raise ValueError(f"No node at '{path}'")
 
     nodes = list(root.allSubChildren()) if recursive else list(root.children())
     nodes.insert(0, root)
@@ -175,7 +175,7 @@ def create_node(parent: str, type_name: str, name: str | None = None,
                 set_parms: dict | None = None, layout: bool = True) -> dict:
     parent_node = hou.node(parent)
     if parent_node is None:
-        raise ValueError(f"Parent no existe: '{parent}'")
+        raise ValueError(f"Parent does not exist: '{parent}'")
     new_node = parent_node.createNode(type_name, node_name=name)
     if set_parms:
         for k, v in set_parms.items():
@@ -192,7 +192,7 @@ def set_parm(path: str, parm: str, value: Any, as_expression: bool = False) -> d
     p = _get_parm_or_raise(path, parm)
     if as_expression:
         if not isinstance(value, str):
-            raise ValueError("as_expression=True requiere value de tipo string.")
+            raise ValueError("as_expression=True requires a string value.")
         p.setExpression(value)
     else:
         p.set(value)
@@ -204,7 +204,7 @@ def connect_nodes(from_path: str, from_output: int,
     src = hou.node(from_path)
     dst = hou.node(to_path)
     if src is None or dst is None:
-        raise ValueError(f"Path inválido: src={from_path} dst={to_path}")
+        raise ValueError(f"Invalid path: src={from_path} dst={to_path}")
     dst.setInput(to_input, src, from_output)
     return {"from": from_path, "to": to_path, "from_output": from_output, "to_input": to_input}
 
@@ -212,7 +212,7 @@ def connect_nodes(from_path: str, from_output: int,
 def delete_node(path: str) -> dict:
     n = hou.node(path)
     if n is None:
-        raise ValueError(f"No existe el nodo en '{path}'")
+        raise ValueError(f"No node at '{path}'")
     n.destroy()
     return {"deleted": path}
 
@@ -260,10 +260,11 @@ def run_python(code: str) -> dict:
 # ---------- Undo grouping ----------
 #
 # A single answer can create a dozen nodes. Without grouping, undoing it means
-# hammering Ctrl+Z blindly, which is why Ivan was versioning the .hip before
-# every request. `hou.undos.group()` is a context manager, and Houdini's undo
-# stack is session state, so entering it on one main-thread call and exiting on
-# a later one collapses the whole turn into one undo entry (verified in H22).
+# hammering Ctrl+Z blindly — enough of a hazard that users end up versioning
+# the .hip before every request. `hou.undos.group()` is a context manager, and
+# Houdini's undo stack is session state, so entering it on one main-thread call
+# and exiting on a later one collapses the whole turn into one undo entry
+# (verified in H22).
 
 _undo_group = None
 
@@ -299,7 +300,7 @@ def undo_end() -> dict:
 def layout_children(path: str) -> dict:
     n = hou.node(path)
     if n is None:
-        raise ValueError(f"No existe el nodo en '{path}'")
+        raise ValueError(f"No node at '{path}'")
     n.layoutChildren()
     return {"laid_out": path}
 
@@ -329,14 +330,14 @@ def _node_brief(n: hou.Node) -> dict:
 def _get_parm_or_raise(path: str, parm: str) -> hou.Parm:
     n = hou.node(path)
     if n is None:
-        raise ValueError(f"No existe el nodo en '{path}'")
+        raise ValueError(f"No node at '{path}'")
     p = n.parm(parm)
     if p is None:
         pt = n.parmTuple(parm)
         if pt is not None and len(pt) == 1:
             p = pt[0]
     if p is None:
-        raise ValueError(f"El nodo '{path}' no tiene el parm '{parm}'")
+        raise ValueError(f"Node '{path}' has no parm '{parm}'")
     return p
 
 

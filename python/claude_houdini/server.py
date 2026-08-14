@@ -271,8 +271,8 @@ def _route_write() -> dict[str, tuple[Callable[[dict], Any], Callable[[dict], tu
                 layout=bool(b.get("layout", True)),
             ),
             lambda b: (
-                f"Crear nodo <b>{b['type']}</b> en <code>{b['parent']}</code>"
-                + (f" con nombre <code>{b['name']}</code>" if b.get("name") else ""),
+                f"Create node <b>{b['type']}</b> in <code>{b['parent']}</code>"
+                + (f" named <code>{b['name']}</code>" if b.get("name") else ""),
                 json.dumps(b.get("set_parms"), indent=2) if b.get("set_parms") else None,
             ),
         ),
@@ -282,8 +282,8 @@ def _route_write() -> dict[str, tuple[Callable[[dict], Any], Callable[[dict], tu
                 as_expression=bool(b.get("as_expression", False)),
             ),
             lambda b: (
-                f"Setear <code>{b['path']}.{b['parm']}</code> = <code>{_clip(repr(b['value']))}</code>"
-                + (" (expresión)" if b.get("as_expression") else ""),
+                f"Set <code>{b['path']}.{b['parm']}</code> = <code>{_clip(repr(b['value']))}</code>"
+                + (" (expression)" if b.get("as_expression") else ""),
                 None,
             ),
         ),
@@ -293,22 +293,22 @@ def _route_write() -> dict[str, tuple[Callable[[dict], Any], Callable[[dict], tu
                 to_path=b["to_path"], to_input=int(b.get("to_input", 0)),
             ),
             lambda b: (
-                f"Conectar <code>{b['from_path']}</code>[{b.get('from_output', 0)}] → "
+                f"Connect <code>{b['from_path']}</code>[{b.get('from_output', 0)}] → "
                 f"<code>{b['to_path']}</code>[{b.get('to_input', 0)}]",
                 None,
             ),
         ),
         "/api/delete_node": (
             lambda b: tools.delete_node(path=b["path"]),
-            lambda b: (f"Borrar nodo <code>{b['path']}</code>", None),
+            lambda b: (f"Delete node <code>{b['path']}</code>", None),
         ),
         "/api/run_python": (
             lambda b: tools.run_python(code=b["code"]),
-            lambda b: ("Ejecutar Python en la sesión de Houdini", b["code"]),
+            lambda b: ("Run Python in the Houdini session", b["code"]),
         ),
         "/api/layout": (
             lambda b: tools.layout_children(path=b["path"]),
-            lambda b: (f"Layout de hijos de <code>{b['path']}</code>", None),
+            lambda b: (f"Lay out children of <code>{b['path']}</code>", None),
         ),
     }
 
@@ -419,7 +419,7 @@ class _Handler(BaseHTTPRequestHandler):
             approved = confirm(tool_name, summary, details)
             if not approved:
                 self._send_json(403, {"ok": False, "error": "user_denied",
-                                       "message": "El usuario canceló esta acción."})
+                                       "message": "The user declined this action."})
                 return
 
         try:
