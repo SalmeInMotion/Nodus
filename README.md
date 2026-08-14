@@ -308,4 +308,5 @@ the text box via a focus proxy.
 
 ## License
 
-Not yet chosen — see the repository owner before reusing.
+MIT — see [LICENSE](LICENSE). Use it, fork it, ship it in your pipeline,
+commercial or not. Attribution is the only requirement.
