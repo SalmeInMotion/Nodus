@@ -186,6 +186,15 @@ class ChatPanel(QtWidgets.QWidget):
         self._dev_chk.toggled.connect(self._on_dev_toggled)
         bar.addWidget(self._dev_chk)
 
+        self._instr_btn = QtWidgets.QToolButton()
+        self._instr_btn.setText("Instructions")
+        self._instr_btn.setToolTip(
+            "Accuracy/conduct rules given to every model (Claude and local).\n"
+            "Edit to taste; emptying the editor restores the shipped defaults."
+        )
+        self._instr_btn.clicked.connect(self._on_edit_instructions)
+        bar.addWidget(self._instr_btn)
+
         self._restart_btn = QtWidgets.QToolButton()
         self._restart_btn.setText("Restart server")
         self._restart_btn.setToolTip("If the internal HTTP server died, press this to bring it back up.")
@@ -410,6 +419,41 @@ class ChatPanel(QtWidgets.QWidget):
         if not local:
             self._begin_undo_group(text)
         (self.submit_local if local else self.submit_claude).emit(text)
+
+    @QtCore.Slot()
+    def _on_edit_instructions(self) -> None:
+        """Edit the rules every model receives. Saving applies immediately:
+        the local prompt is rebuilt per call anyway, and the Claude process is
+        handed the rebuilt prompt (which restarts it on the next turn)."""
+        from . import instructions
+
+        dlg = QtWidgets.QDialog(self)
+        dlg.setWindowTitle("Model instructions")
+        dlg.resize(760, 560)
+        v = QtWidgets.QVBoxLayout(dlg)
+        hint = QtWidgets.QLabel(
+            "Given to every backend. Empty the editor to restore the defaults.")
+        hint.setStyleSheet("color:#888;")
+        v.addWidget(hint)
+        editor = QtWidgets.QPlainTextEdit()
+        editor.setPlainText(instructions.effective())
+        v.addWidget(editor)
+        btns = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        v.addWidget(btns)
+
+        if dlg.exec() != QtWidgets.QDialog.Accepted:
+            return
+        instructions.save(editor.toPlainText())
+        custom = instructions.path().exists()
+        self._append_system(
+            "Instructions updated ({}). They apply to the next answer.".format(
+                "custom" if custom else "defaults restored"))
+        if self._worker is not None and self._bearer:
+            self._worker.set_system_prompt(
+                system_prompt.build(server.base_url(), self._bearer))
 
     @QtCore.Slot()
     def _on_restart_server(self) -> None:

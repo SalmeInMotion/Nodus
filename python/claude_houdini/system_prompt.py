@@ -76,6 +76,11 @@ def _lessons_section() -> str:
             + text[:4000] + "\n")
 
 
+def _rules() -> str:
+    from . import instructions
+    return instructions.effective().strip()
+
+
 def build(base_url: str, token: str) -> str:
     workspace = str(config.WORKSPACE_DIR).replace("\\", "/")
     return f"""\
@@ -228,6 +233,10 @@ to find out which nodes exist, `/api/nodes` is cheaper and more precise.
 - 500: internal exception, with traceback
 
 {_docs_section()}{_lessons_section()}
+# Accuracy and conduct rules (non-negotiable)
+
+{_rules()}
+
 # How to work well
 
 1. **Investigate before changing the scene.** Before proposing a non-trivial

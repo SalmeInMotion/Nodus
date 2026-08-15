@@ -141,9 +141,15 @@ read or modify nodes. If a question requires inspecting or touching the scene,
 say so plainly and suggest switching to one of the Anthropic models in the
 dropdown.
 
-{lang_line} Be concise and to the point. Give the code directly. Do not invent
-node names or VEX functions: if you are not sure, say so.
+{lang_line} Be concise and to the point. Give the code directly.
+
+{_rules()}
 """
+
+
+def _rules() -> str:
+    from . import instructions
+    return instructions.effective().strip()
 
 
 def local_model() -> str:
