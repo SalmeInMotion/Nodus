@@ -26,6 +26,11 @@ SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 WORKSPACE_DIR = ROOT / ".workspace"
 WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
 
+# Offline documentation corpus: a folder of consolidated markdown volumes
+# generated from Houdini's own installed help (see docs_corpus.py). Not
+# distributed with Nodus — the text is SideFX's.
+DOCS_DIR = Path(os.environ.get("CLAUDE_HOUDINI_DOCS") or ROOT / ".docs")
+
 
 def model() -> str:
     return os.environ.get(MODEL_ENV) or MODEL_DEFAULT

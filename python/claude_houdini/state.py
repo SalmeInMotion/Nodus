@@ -25,6 +25,7 @@ _state: dict = {
     # "claude" (agentic, sees the scene) or "local" (Ollama, chat only)
     "backend": "claude",
     "anthropic_model": "claude-opus-5",
+    "local_model": "",
 }
 
 
@@ -89,4 +90,15 @@ def anthropic_model() -> str:
 def set_anthropic_model(name: str) -> None:
     with _lock:
         _state["anthropic_model"] = str(name)
+        _save()
+
+
+def local_model() -> str:
+    with _lock:
+        return str(_state.get("local_model", ""))
+
+
+def set_local_model(name: str) -> None:
+    with _lock:
+        _state["local_model"] = str(name)
         _save()

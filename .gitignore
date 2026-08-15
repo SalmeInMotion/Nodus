@@ -4,6 +4,10 @@
 # cwd handed to the `claude` subprocess: scratch scripts and screen captures.
 .workspace/
 
+# Offline docs corpus (~30 MB of SideFX's documentation text, generated
+# locally from the installed Houdini help — theirs to distribute, not ours).
+.docs/
+
 # MCP adapter venv (~75 MB). Recreate with the steps in the README:
 #   python -m venv .venv-mcp
 #   .venv-mcp\Scripts\python.exe -m pip install mcp

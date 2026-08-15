@@ -31,6 +31,32 @@ def _audience() -> str:
     return f"{who} {lang}"
 
 
+def _docs_section() -> str:
+    """Offline documentation block, only when the corpus is present."""
+    from . import docs_corpus
+
+    if not docs_corpus.available():
+        return ""
+    docs = str(docs_corpus.corpus_dir()).replace("\\", "/")
+    return f"""
+# Offline Houdini documentation (authoritative — use it)
+
+`{docs}` holds the full official Houdini docs as ~20 consolidated markdown
+volumes (one per domain: SOP, LOP/Solaris, DOP, COP, VEX, the `hou` API…).
+Every node/topic is a header of the form `## Node Name (context/internalname)`,
+e.g. `## Time Shift (sop/timeshift)`.
+
+Rules:
+- **Never assert a node or parameter name from memory.** Grep the corpus
+  first: `Grep` for `^## .*[Nn]ame` to find a node, then `Read` that file at
+  the matching offset to get its full section (parameters included).
+- For "which node does X" questions, grep for task words in the bodies, or
+  list candidates from the volume's table of contents.
+- This corpus matches the installed Houdini version exactly, so prefer it
+  over WebSearch for anything about nodes, parameters, VEX or `hou`.
+"""
+
+
 def build(base_url: str, token: str) -> str:
     workspace = str(config.WORKSPACE_DIR).replace("\\", "/")
     return f"""\
@@ -182,6 +208,7 @@ to find out which nodes exist, `/api/nodes` is cheaper and more precise.
 - 403: `{{"ok": false, "error": "user_denied"}}` — the user declined (confirmation mode). Ask what they would prefer; do not insist.
 - 500: internal exception, with traceback
 
+{_docs_section()}
 # How to work well
 
 1. **Investigate before changing the scene.** Before proposing a non-trivial

@@ -65,12 +65,31 @@ def on_destroy() -> None:
 # Panel
 # ============================================================
 
-# Backends offered in the combo: (label, backend id, model id or None)
-_BACKENDS = [
-    ("Opus 5",       "claude", "claude-opus-5"),
-    ("Sonnet 4.6",   "claude", "claude-sonnet-4-6"),
-    ("Qwen3.6 local", "local",  None),
+# Anthropic entries are fixed; local entries are discovered from whatever
+# Ollama has pulled (chat-capable, >=4B — see local_runner). The menu is built
+# once per panel: (label, backend id, model id).
+_CLAUDE_BACKENDS = [
+    ("Opus 5",   "claude", "claude-opus-5"),
+    ("Sonnet 5", "claude", "claude-sonnet-5"),
 ]
+
+
+def _discover_backends() -> list[tuple[str, str, str]]:
+    from . import local_runner
+
+    entries = list(_CLAUDE_BACKENDS)
+    models = local_runner.installed_local_models()
+    for m in models:
+        label = f"{m['name']} · local"
+        if m.get("gb"):
+            label += f" ({m['gb']:g} GB)"
+        entries.append((label, "local", m["name"]))
+    if not models:
+        # Ollama down or empty: keep one local entry so the mode stays
+        # reachable; the worker autostarts Ollama on first use.
+        entries.append((f"{local_runner.local_model()} · local", "local",
+                        local_runner.local_model()))
+    return entries
 
 # Colour per speaker, so who said what is readable at a glance.
 _SPEAKER_COLORS = {
@@ -103,6 +122,11 @@ class ChatPanel(QtWidgets.QWidget):
         self._local_thread: Optional[QtCore.QThread] = None
         self._backend = state.backend()
 
+        # Restore the persisted local model before anything reads the env.
+        if state.local_model():
+            from .local_runner import LOCAL_MODEL_ENV
+            os.environ.setdefault(LOCAL_MODEL_ENV, state.local_model())
+
         # Token currently in use by the server (masked in displays).
         self._bearer: Optional[str] = None
         # Storage of full contents for click-to-expand. Key: short id, value: full text.
@@ -126,12 +150,13 @@ class ChatPanel(QtWidgets.QWidget):
         bar.addWidget(self._status)
         bar.addStretch(1)
 
+        self._backends = _discover_backends()
         self._backend_combo = QtWidgets.QComboBox()
-        for label, _backend, _model in _BACKENDS:
+        for label, _backend, _model in self._backends:
             self._backend_combo.addItem(label)
         self._backend_combo.setToolTip(
-            "Opus 5 / Sonnet: agentic, they see and modify your scene (uses tokens).\n"
-            "Qwen3.6 local: runs on your GPU via Ollama, free and offline, but\n"
+            "Opus / Sonnet: agentic, they see and modify your scene (uses tokens).\n"
+            "Local models (via Ollama): run on your GPU, free and offline, but\n"
             "with NO scene access - VEX, node and syntax questions only."
         )
         self._backend_combo.setCurrentIndex(self._initial_backend_index())
@@ -241,13 +266,17 @@ class ChatPanel(QtWidgets.QWidget):
     # ---------- Backend selection ----------
 
     def _initial_backend_index(self) -> int:
-        want_backend, want_model = state.backend(), state.anthropic_model()
-        for i, (_label, backend, model) in enumerate(_BACKENDS):
+        want_backend = state.backend()
+        want_model = (state.local_model() if want_backend == "local"
+                      else state.anthropic_model())
+        fallback = None
+        for i, (_label, backend, model) in enumerate(self._backends):
             if backend != want_backend:
                 continue
-            if backend == "local" or model == want_model:
+            if model == want_model:
                 return i
-        return 0
+            fallback = fallback if fallback is not None else i
+        return fallback if fallback is not None else 0
 
     @QtCore.Slot(int)
     def _on_backend_changed(self, index: int) -> None:
@@ -260,11 +289,14 @@ class ChatPanel(QtWidgets.QWidget):
             self._backend_combo.blockSignals(False)
             return
 
-        label, backend, model = _BACKENDS[index]
+        label, backend, model = self._backends[index]
         self._backend = backend
         state.set_backend(backend)
 
         if backend == "local":
+            from .local_runner import LOCAL_MODEL_ENV
+            state.set_local_model(model)
+            os.environ[LOCAL_MODEL_ENV] = model
             self._ensure_local_worker()
             self._append_system(
                 f"Backend: <b>{label}</b> - on your GPU, free, with no scene access. "

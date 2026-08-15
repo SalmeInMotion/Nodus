@@ -23,7 +23,11 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
 import hbridge  # noqa: E402  (same directory)
+
+# hou-free on purpose, so it works outside Houdini (this process).
+from claude_houdini import docs_corpus  # noqa: E402
 
 # Requires the MCP SDK 2.x (`pip install "mcp>=2,<3"`). In 1.x this class was
 # mcp.server.fastmcp.FastMCP, so an unpinned install can break the import.
@@ -167,6 +171,30 @@ def houdini_run_python(code: str, port: int = 0) -> dict:
     access, main thread). Returns {stdout, result, error}. Use the typed tools
     when one fits; use this for everything they do not cover."""
     return _call(port, "/api/run_python", body={"code": code})
+
+
+@mcp.tool()
+def houdini_docs_node(name: str) -> dict:
+    """Official documentation for one node/topic, from the local offline
+    corpus (matches the installed Houdini version). `name` can be a label
+    ("Time Shift"), an internal name ("timeshift") or context-qualified
+    ("sop/timeshift" — use this form when contexts share a name). Prefer this
+    over memory before asserting parameter names."""
+    if not docs_corpus.available():
+        return {"error": "no docs corpus installed (see README, 'Offline docs')"}
+    hit = docs_corpus.find_node(name)
+    return hit or {"error": f"no section found for {name!r}"}
+
+
+@mcp.tool()
+def houdini_docs_search(query: str, max_sections: int = 3) -> list[dict]:
+    """Keyword search over the offline Houdini docs corpus; returns whole
+    documentation sections. Header-based: query with node/parameter vocabulary
+    ("scatter density attribute"), not task prose. For task-style questions,
+    try a couple of vocabulary variants."""
+    if not docs_corpus.available():
+        return [{"error": "no docs corpus installed (see README, 'Offline docs')"}]
+    return docs_corpus.search(query, max_sections=max_sections)
 
 
 if __name__ == "__main__":

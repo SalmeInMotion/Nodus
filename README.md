@@ -91,6 +91,7 @@ All optional environment variables:
 | `CLAUDE_HOUDINI_CLI` | `claude` | Path to the `claude` binary if it is not on PATH |
 | `CLAUDE_HOUDINI_MODEL` | `claude-opus-5` | Anthropic model for the panel |
 | `CLAUDE_HOUDINI_LOCAL_MODEL` | `qwen3.6:latest` | Ollama model for the local backend |
+| `CLAUDE_HOUDINI_DOCS` | `<project>/.docs` | Offline docs corpus folder (see "Offline docs") |
 | `CLAUDE_HOUDINI_OLLAMA` | `http://127.0.0.1:11434` | Ollama endpoint |
 | `CLAUDE_HOUDINI_LANGUAGE` | — | Force replies into one language, e.g. `"Spanish (es-ES)"` |
 | `CLAUDE_HOUDINI_USER_NAME` | — | Your name, for the assistant to address you |
@@ -107,13 +108,33 @@ Pick one from the dropdown in the panel:
 |---|---|
 | **Opus 5** | Agentic. Sees and modifies the scene through the HTTP API. Default. |
 | **Sonnet 4.6** | Same, faster and cheaper — good for mechanical work. |
-| **Qwen3.6 local** | Ollama on your GPU. Free and offline, but **no scene access**: VEX, node and syntax questions only. |
+| **Local models** | Every chat-capable model Ollama has pulled (≥4B parameters) appears in the dropdown with its VRAM cost. Free and offline, but **no scene access**: VEX, node and syntax questions only. |
+
+Local entries are discovered live from Ollama; embedding models and models too
+small to answer Houdini questions reliably are filtered out. If Ollama is not
+running, the first local request starts it.
 
 Switching backend restarts the conversation. The choice persists in
 `.sessions/state.json`.
 
 Cancelling a local answer also asks Ollama to unload the model
 (`keep_alive: 0`) instead of leaving tens of GB of VRAM occupied.
+
+## Offline docs
+
+Point `CLAUDE_HOUDINI_DOCS` (default: `<project>/.docs/`) at a folder of
+consolidated markdown volumes generated from Houdini's installed help, where
+each node/topic is a `## Name (context/internalname)` header. When present:
+
+- the **panel's Claude** is instructed to grep/read it before asserting any
+  node or parameter name (it matches your installed Houdini exactly)
+- **local models** get the most relevant documentation sections injected into
+  their context automatically — grounding without tool use
+- the **MCP server** exposes `houdini_docs_node` and `houdini_docs_search` to
+  any client
+
+The corpus is not distributed with Nodus — the text belongs to SideFX. A
+generator that builds it from your own Houdini install is on the roadmap.
 
 ## Vision
 
@@ -300,6 +321,7 @@ the text box via a focus proxy.
 - [x] Persistent process + token streaming
 - [x] Local model backend
 - [x] Multi-session discovery + MCP adapter
+- [ ] Docs-corpus generator (build `.docs/` from any Houdini install's help)
 - [ ] Markdown rendering in the chat log
 - [ ] Persist chat history across Houdini sessions
 - [ ] Local backend with tool use (Ollama supports tool calling)

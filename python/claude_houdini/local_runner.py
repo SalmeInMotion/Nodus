@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import urllib.error
 import urllib.request
@@ -26,6 +27,99 @@ from .cli_runner import StreamEvent
 OLLAMA_URL = os.environ.get("CLAUDE_HOUDINI_OLLAMA", "http://127.0.0.1:11434")
 LOCAL_MODEL_ENV = "CLAUDE_HOUDINI_LOCAL_MODEL"
 LOCAL_MODEL_DEFAULT = "qwen3.6:latest"
+
+
+# ---------- model discovery (ported from VEXgraph's providers.py) ----------
+
+# Below ~4B parameters a model answers confidently wrong about Houdini —
+# invented VEX functions, answers in the wrong language. Not offered at all.
+_MINIMUM_BILLIONS = 4.0
+
+
+def _ollama_answers(timeout: int = 2) -> bool:
+    try:
+        with urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=timeout):
+            return True
+    except (urllib.error.URLError, OSError, TimeoutError):
+        return False
+
+
+def start_ollama(wait: float = 25.0) -> tuple[bool, str]:
+    """Start Ollama if it is not answering. Detached: it outlives this request."""
+    import shutil
+    import subprocess
+    import time
+
+    if _ollama_answers():
+        return True, ""
+    executable = shutil.which("ollama")
+    if executable is None:
+        return False, ("Ollama is not installed (no `ollama` on PATH). "
+                       "Install it from ollama.com, or use a Claude backend.")
+    options: dict = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    if os.name == "nt":
+        options["creationflags"] = (getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                                    | getattr(subprocess, "DETACHED_PROCESS", 0))
+    else:
+        options["start_new_session"] = True
+    try:
+        subprocess.Popen([executable, "serve"], **options)
+    except OSError as exc:
+        return False, f"Could not start Ollama: {exc}"
+    deadline = time.monotonic() + wait
+    while time.monotonic() < deadline:
+        if _ollama_answers():
+            return True, ""
+        time.sleep(0.4)
+    return False, f"Ollama started but did not answer within {wait:.0f}s."
+
+
+def _billions(parameters: str) -> float:
+    m = re.match(r"\s*([\d.]+)\s*([BM])", str(parameters), re.IGNORECASE)
+    if not m:
+        return 0.0
+    size = float(m.group(1))
+    return size / 1000 if m.group(2).upper() == "M" else size
+
+
+def _can_chat(name: str, timeout: int = 2) -> bool:
+    """Ollama lists embedding models (bge-m3…) next to chat models; sending
+    those a conversation is a bare 400. /api/show tells them apart."""
+    req = urllib.request.Request(
+        f"{OLLAMA_URL}/api/show",
+        data=json.dumps({"model": name}).encode("utf-8"),
+        headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            caps = json.loads(resp.read().decode("utf-8")).get("capabilities")
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+        return True   # can't tell -> keep it
+    return not caps or "completion" in caps
+
+
+def installed_local_models(timeout: int = 2) -> list[dict]:
+    """Chat-capable, trustworthy-sized models Ollama has pulled, best-effort.
+
+    Returns [] silently when Ollama is down: this feeds a dropdown at panel
+    startup and must never block or spawn processes just to fill a menu.
+    """
+    try:
+        with urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=timeout) as resp:
+            tags = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+        return []
+    out = []
+    for model in tags.get("models", ()):
+        name = model.get("name")
+        if not name or not _can_chat(name):
+            continue
+        params = (model.get("details") or {}).get("parameter_size", "")
+        if _billions(params) and _billions(params) < _MINIMUM_BILLIONS:
+            continue
+        out.append({"name": name,
+                    "gb": round(int(model.get("size", 0) or 0) / 1e9, 1),
+                    "parameters": params})
+    return sorted(out, key=lambda m: -m["gb"])
 
 
 def _system_prompt() -> str:
@@ -54,6 +148,23 @@ node names or VEX functions: if you are not sure, say so.
 
 def local_model() -> str:
     return os.environ.get(LOCAL_MODEL_ENV) or LOCAL_MODEL_DEFAULT
+
+
+def _docs_context(prompt: str) -> str:
+    """Documentation sections relevant to the prompt, or "" when none/absent."""
+    try:
+        from . import docs_corpus
+        if not docs_corpus.available():
+            return ""
+        hits = docs_corpus.search(prompt, max_sections=3, max_chars=6000)
+        if not hits:
+            return ""
+        blocks = "\n\n---\n\n".join(h["text"] for h in hits)
+        return ("Reference sections from the official Houdini documentation "
+                "installed on this machine. Ground your answer in these when "
+                "they are relevant; say so when they are not:\n\n" + blocks)
+    except Exception:
+        return ""   # grounding must never break the chat
 
 
 class LocalWorker(QtCore.QObject):
@@ -132,11 +243,30 @@ class LocalWorker(QtCore.QObject):
 
     def _chat(self, prompt: str) -> None:
         model = local_model()
+
+        # "Ollama is not running — go start it" is an errand the tool can run
+        # itself (one detached process, ~a second).
+        if not _ollama_answers():
+            self.event.emit(StreamEvent("info", {"message": "starting Ollama…"}))
+            ok, why = start_ollama()
+            if not ok:
+                raise RuntimeError(why)
+
         self._history.append({"role": "user", "content": prompt})
+
+        # Ground the local model in the offline docs corpus when there is one.
+        # A 30B model without tools invents VEX functions; three whole doc
+        # sections in context is the cheapest cure. Per-call, never stored in
+        # history — grounding one answer must not bloat the rest of the chat.
+        messages = [{"role": "system", "content": _system_prompt()}]
+        grounding = _docs_context(prompt)
+        if grounding:
+            messages.append({"role": "system", "content": grounding})
+        messages += self._history
 
         payload = {
             "model": model,
-            "messages": [{"role": "system", "content": _system_prompt()}] + self._history,
+            "messages": messages,
             "stream": True,
             "think": False,
         }
