@@ -13,8 +13,10 @@ Notable behaviours:
 from __future__ import annotations
 
 import html
+import json
 import os
 import re
+import time
 import traceback
 from typing import Optional
 
@@ -132,6 +134,9 @@ class ChatPanel(QtWidgets.QWidget):
         # Storage of full contents for click-to-expand. Key: short id, value: full text.
         self._expandable: dict[str, dict] = {}
         self._expand_counter = 0
+        # Pending thumbs-up/down records, by id. Removed once voted.
+        self._feedback: dict[str, dict] = {}
+        self._last_prompt = ""
 
         self._build_ui()
         self._start_server_and_worker()
@@ -399,6 +404,7 @@ class ChatPanel(QtWidgets.QWidget):
 
         self._input.clear()
         self._append_user(text)
+        self._last_prompt = text
         self._set_busy(True)
         # The local backend cannot touch the scene, so there is nothing to undo.
         if not local:
@@ -498,6 +504,54 @@ class ChatPanel(QtWidgets.QWidget):
         self._set_busy(False)
         if not ok and final:
             self._append_error(final)
+        elif final.strip():
+            self._offer_feedback(final)
+
+    # ---------- thumbs feedback ----------
+
+    def _offer_feedback(self, answer: str) -> None:
+        """Append vote links under the answer.
+
+        What a vote can and cannot do: no weights are updated anywhere — the
+        record lands in .sessions/feedback.jsonl, and the durable channel is
+        lessons.md, distilled from those records, which the system prompt
+        loads. Honest learning, not the illusion of it.
+        """
+        self._expand_counter += 1
+        fid = f"f{self._expand_counter}"
+        self._feedback[fid] = {
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "backend": self._backend,
+            "model": self._speaker_label(),
+            "prompt": self._last_prompt[:2000],
+            "answer": answer[:4000],
+        }
+        self._append_html(
+            f"<span style='font-size:9pt;'>"
+            f"<a href='claude://fb/{fid}/up' style='color:#6a8caf;text-decoration:none;'>👍</a>"
+            f" · "
+            f"<a href='claude://fb/{fid}/down' style='color:#6a8caf;text-decoration:none;'>👎</a>"
+            f"</span>"
+        )
+
+    def _record_feedback(self, fid: str, verdict: str) -> None:
+        record = self._feedback.pop(fid, None)
+        if record is None:
+            return   # already voted, or stale id
+        record["verdict"] = verdict
+        if verdict == "down":
+            note, ok = QtWidgets.QInputDialog.getText(
+                self, "What went wrong?",
+                "Optional: what was wrong with this answer?")
+            if ok and note.strip():
+                record["note"] = note.strip()
+        try:
+            path = config.SESSIONS_DIR / "feedback.jsonl"
+            with open(path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+            self._append_info(f"feedback saved ({'👍' if verdict == 'up' else '👎'})")
+        except OSError as e:
+            self._append_info(f"could not save feedback: {e}")
 
     # ---------- undo grouping ----------
 
@@ -525,6 +579,13 @@ class ChatPanel(QtWidgets.QWidget):
             entry = self._expandable.get(block_id)
             if entry:
                 self._show_full(entry["title"], entry["body"])
+        elif s.startswith("claude://fb/"):
+            try:
+                fid, verdict = s[len("claude://fb/"):].split("/", 1)
+            except ValueError:
+                return
+            if verdict in ("up", "down"):
+                self._record_feedback(fid, verdict)
 
     # ---------- Expand modal ----------
 

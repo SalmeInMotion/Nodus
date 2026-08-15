@@ -1,5 +1,9 @@
 # Runtime session files — these hold the bridge's bearer TOKENS. Never commit.
+# (feedback.jsonl lives here too: prompts and answers are personal data.)
 .sessions/
+
+# Distilled per-user lessons loaded into the system prompt.
+lessons.md
 
 # cwd handed to the `claude` subprocess: scratch scripts and screen captures.
 .workspace/

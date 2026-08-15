@@ -57,6 +57,25 @@ Rules:
 """
 
 
+def _lessons_section() -> str:
+    """Distilled corrections from past sessions, when the user keeps any.
+
+    lessons.md is the durable half of the thumbs feedback loop: votes land in
+    .sessions/feedback.jsonl as raw data, and what belongs in every future
+    prompt gets distilled into this file. Injecting the raw votes instead
+    would be noise wearing a learning costume.
+    """
+    path = config.ROOT / "lessons.md"
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+    if not text:
+        return ""
+    return ("\n# Lessons from past sessions (follow these)\n\n"
+            + text[:4000] + "\n")
+
+
 def build(base_url: str, token: str) -> str:
     workspace = str(config.WORKSPACE_DIR).replace("\\", "/")
     return f"""\
@@ -208,7 +227,7 @@ to find out which nodes exist, `/api/nodes` is cheaper and more precise.
 - 403: `{{"ok": false, "error": "user_denied"}}` — the user declined (confirmation mode). Ask what they would prefer; do not insist.
 - 500: internal exception, with traceback
 
-{_docs_section()}
+{_docs_section()}{_lessons_section()}
 # How to work well
 
 1. **Investigate before changing the scene.** Before proposing a non-trivial
