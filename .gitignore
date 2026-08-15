@@ -2,8 +2,9 @@
 # (feedback.jsonl lives here too: prompts and answers are personal data.)
 .sessions/
 
-# Distilled per-user lessons loaded into the system prompt.
+# Per-user files loaded into the system prompt.
 lessons.md
+instructions.md
 
 # cwd handed to the `claude` subprocess: scratch scripts and screen captures.
 .workspace/
