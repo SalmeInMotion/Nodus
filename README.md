@@ -108,15 +108,19 @@ Pick one from the dropdown in the panel:
 | Option | What it is |
 |---|---|
 | **Opus 5** | Agentic. Sees and modifies the scene through the HTTP API. Default. |
-| **Sonnet 4.6** | Same, faster and cheaper — good for mechanical work. |
+| **Fable 5** | Mythos-class tier, above Opus in capability. |
+| **Sonnet 5** | Faster and cheaper — good for mechanical work. |
 | **Local models** | Every chat-capable model Ollama has pulled (≥4B parameters) appears in the dropdown with its VRAM cost. Free and offline, but **no scene access**: VEX, node and syntax questions only. |
 
 Local entries are discovered live from Ollama; embedding models and models too
 small to answer Houdini questions reliably are filtered out. If Ollama is not
 running, the first local request starts it.
 
-Switching backend restarts the conversation. The choice persists in
-`.sessions/state.json`.
+A separate dropdown sets **reasoning effort** (low → max) for the Anthropic
+models; local models ignore it.
+
+Switching backend or effort restarts the conversation — both are read when the
+`claude` process spawns. Choices persist in `.sessions/state.json`.
 
 Cancelling a local answer also asks Ollama to unload the model
 (`keep_alive: 0`) instead of leaving tens of GB of VRAM occupied.
