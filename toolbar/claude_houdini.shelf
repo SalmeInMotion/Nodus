@@ -3,7 +3,7 @@
   <!-- Shelf tools shipped with the claude_houdini package.
        Drag the tool into any shelf for 1-click access. -->
 
-  <tool name="claude_chat_open" label="Claude Chat" icon="MISC_python">
+  <tool name="claude_chat_open" label="Nodus" icon="MISC_python">
     <helpText><![CDATA[Open the Claude chat panel as a floating window.]]></helpText>
     <script scriptType="python"><![CDATA[
 import hou

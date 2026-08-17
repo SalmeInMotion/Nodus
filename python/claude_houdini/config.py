@@ -15,6 +15,11 @@ CLAUDE_CLI_DEFAULT = "claude"
 MODEL_ENV = "CLAUDE_HOUDINI_MODEL"
 MODEL_DEFAULT = "claude-opus-5"
 
+# Reasoning effort passed to the CLI (low | medium | high | xhigh | max).
+EFFORT_ENV = "CLAUDE_HOUDINI_EFFORT"
+EFFORT_DEFAULT = "high"
+EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+
 ROOT = Path(os.environ.get("CLAUDE_HOUDINI_ROOT", Path(__file__).resolve().parents[2]))
 
 SESSIONS_DIR = ROOT / ".sessions"
@@ -34,6 +39,11 @@ DOCS_DIR = Path(os.environ.get("CLAUDE_HOUDINI_DOCS") or ROOT / ".docs")
 
 def model() -> str:
     return os.environ.get(MODEL_ENV) or MODEL_DEFAULT
+
+
+def effort() -> str:
+    value = (os.environ.get(EFFORT_ENV) or EFFORT_DEFAULT).lower()
+    return value if value in EFFORT_LEVELS else EFFORT_DEFAULT
 
 REQUEST_TIMEOUT_S = 600
 CONFIRM_TIMEOUT_S = 120

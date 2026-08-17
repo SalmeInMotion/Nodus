@@ -72,6 +72,7 @@ def on_destroy() -> None:
 # once per panel: (label, backend id, model id).
 _CLAUDE_BACKENDS = [
     ("Opus 5",   "claude", "claude-opus-5"),
+    ("Fable 5",  "claude", "claude-fable-5"),
     ("Sonnet 5", "claude", "claude-sonnet-5"),
 ]
 
@@ -150,6 +151,11 @@ class ChatPanel(QtWidgets.QWidget):
 
         # Top status bar
         bar = QtWidgets.QHBoxLayout()
+        from . import __version__
+        title = QtWidgets.QLabel(f"<b>Nodus</b> <span style='color:#777;'>v{__version__}</span>")
+        title.setToolTip("Version of the Nodus package currently loaded by Houdini.")
+        bar.addWidget(title)
+
         self._status = QtWidgets.QLabel("Starting…")
         self._status.setStyleSheet("color: #888;")
         bar.addWidget(self._status)
@@ -167,6 +173,17 @@ class ChatPanel(QtWidgets.QWidget):
         self._backend_combo.setCurrentIndex(self._initial_backend_index())
         self._backend_combo.currentIndexChanged.connect(self._on_backend_changed)
         bar.addWidget(self._backend_combo)
+
+        self._effort_combo = QtWidgets.QComboBox()
+        self._effort_combo.addItems(config.EFFORT_LEVELS)
+        self._effort_combo.setToolTip(
+            "How hard the model thinks before answering. Higher is slower and\n"
+            "costs more; 'high' is a good default, 'max' for genuinely hard\n"
+            "problems. Applies to Anthropic models only (local models ignore it)."
+        )
+        self._effort_combo.setCurrentText(state.effort())
+        self._effort_combo.currentTextChanged.connect(self._on_effort_changed)
+        bar.addWidget(self._effort_combo)
 
         self._auto_chk = QtWidgets.QCheckBox("Autonomous")
         self._auto_chk.setToolTip(
@@ -361,9 +378,10 @@ class ChatPanel(QtWidgets.QWidget):
         self._bearer = token
         prompt = system_prompt.build(url, token)
 
-        # Honour the model persisted from a previous session before the
-        # process spawns (config.model() reads the env at spawn time).
+        # Honour what was persisted before the process spawns (config reads
+        # the env at spawn time).
         os.environ.setdefault(config.MODEL_ENV, state.anthropic_model())
+        os.environ.setdefault(config.EFFORT_ENV, state.effort())
 
         self._thread = QtCore.QThread(self)
         self._worker = ClaudeWorker(prompt)
@@ -419,6 +437,23 @@ class ChatPanel(QtWidgets.QWidget):
         if not local:
             self._begin_undo_group(text)
         (self.submit_local if local else self.submit_claude).emit(text)
+
+    @QtCore.Slot(str)
+    def _on_effort_changed(self, level: str) -> None:
+        if self._busy:
+            self._effort_combo.blockSignals(True)
+            self._effort_combo.setCurrentText(state.effort())
+            self._effort_combo.blockSignals(False)
+            QtWidgets.QMessageBox.information(
+                self, "Busy", "An answer is in progress. Cancel it first.")
+            return
+        state.set_effort(level)
+        os.environ[config.EFFORT_ENV] = level
+        # Read when the process spawns, so drop the current one.
+        if self._worker is not None:
+            self._worker.reset_session()
+        self._append_system(
+            f"Effort: <b>{level}</b>. The conversation restarts (new process).")
 
     @QtCore.Slot()
     def _on_edit_instructions(self) -> None:

@@ -150,6 +150,7 @@ class ClaudeWorker(QtCore.QObject):
             cli,
             "--print",
             "--model", config.model(),
+            "--effort", config.effort(),
             "--input-format", "stream-json",
             "--output-format", "stream-json",
             "--verbose",                 # required by the CLI for stream-json
@@ -181,7 +182,7 @@ class ClaudeWorker(QtCore.QObject):
             name="claude-stderr", daemon=True).start()
 
         self.event.emit(StreamEvent("info", {
-            "message": f"claude process started ({config.model()})"
+            "message": f"claude process started ({config.model()}, effort={config.effort()})"
         }))
 
     def _kill_process(self) -> None:

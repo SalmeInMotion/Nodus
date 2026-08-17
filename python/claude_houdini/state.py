@@ -26,6 +26,7 @@ _state: dict = {
     "backend": "claude",
     "anthropic_model": "claude-opus-5",
     "local_model": "",
+    "effort": "high",
 }
 
 
@@ -101,4 +102,15 @@ def local_model() -> str:
 def set_local_model(name: str) -> None:
     with _lock:
         _state["local_model"] = str(name)
+        _save()
+
+
+def effort() -> str:
+    with _lock:
+        return str(_state.get("effort", "high"))
+
+
+def set_effort(level: str) -> None:
+    with _lock:
+        _state["effort"] = str(level)
         _save()

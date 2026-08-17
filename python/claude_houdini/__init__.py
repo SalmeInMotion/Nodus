@@ -1,3 +1,3 @@
-"""Claude Houdini integration — chat panel + HTTP tool server for Claude CLI."""
+"""Nodus — AI chat panel and MCP bridge inside Houdini."""
 
-__version__ = "0.1.0"
+__version__ = "0.5.0"

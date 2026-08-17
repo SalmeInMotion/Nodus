@@ -51,8 +51,8 @@ whatever language you write to it in.
 
 Restart Houdini, then open the panel:
 
-- **Shelf**: `Claude` tab → **Claude Chat** button
-- Or the **"+"** menu of any pane tab → **Claude Chat**
+- **Shelf**: `Claude` tab → **Nodus** button
+- Or the **"+"** menu of any pane tab → **Nodus**
 
 ## How it works
 
@@ -90,6 +90,7 @@ All optional environment variables:
 | `CLAUDE_HOUDINI_PORT` | `8742` | HTTP server port. When set, it is exact — no fallback |
 | `CLAUDE_HOUDINI_CLI` | `claude` | Path to the `claude` binary if it is not on PATH |
 | `CLAUDE_HOUDINI_MODEL` | `claude-opus-5` | Anthropic model for the panel |
+| `CLAUDE_HOUDINI_EFFORT` | `high` | Reasoning effort: low, medium, high, xhigh, max |
 | `CLAUDE_HOUDINI_LOCAL_MODEL` | `qwen3.6:latest` | Ollama model for the local backend |
 | `CLAUDE_HOUDINI_DOCS` | `<project>/.docs` | Offline docs corpus folder (see "Offline docs") |
 | `CLAUDE_HOUDINI_OLLAMA` | `http://127.0.0.1:11434` | Ollama endpoint |
