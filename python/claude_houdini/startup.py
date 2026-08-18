@@ -82,6 +82,37 @@ def autostart_server() -> None:
     try:
         from . import server
         url, _ = server.start()
-        sys.stderr.write(f"[claude_houdini] bridge listening on {url}\n")
+        sys.stderr.write(f"[claude_houdini] bridge listening on {url} "
+                         f"as {server.session_id()}\n")
+        _tag_window(server)
     except Exception as e:
         sys.stderr.write(f"[claude_houdini] bridge autostart failed: {e}\n")
+
+
+def _tag_window(server) -> None:
+    """Put the bridge id in the window title.
+
+    With several Houdinis open, "which window is port 8756?" is otherwise
+    unanswerable from the taskbar. Houdini rewrites this title whenever the
+    scene changes, so this is a best-effort stamp, not a guarantee.
+    """
+    try:
+        import hou
+        if not hou.isUIAvailable():
+            return
+        window = None
+        for getter in (lambda: hou.qt.mainWindow(),
+                       lambda: hou.ui.mainQtWindow()):
+            try:
+                window = getter()
+                if window is not None:
+                    break
+            except Exception:
+                continue
+        if window is None:
+            return
+        tag = f"  [Nodus {server.session_id()} :{server.port()}]"
+        if tag.strip() not in window.windowTitle():
+            window.setWindowTitle(window.windowTitle() + tag)
+    except Exception as e:
+        sys.stderr.write(f"[claude_houdini] could not tag the window: {e}\n")

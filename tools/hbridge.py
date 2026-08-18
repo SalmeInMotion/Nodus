@@ -73,16 +73,23 @@ def list_sessions(root: str | None) -> list[dict]:
             "url": data.get("url") or f"http://127.0.0.1:{data.get('port', DEFAULT_PORT)}",
             "port": data.get("port"),
             "token": data.get("token", ""),
+            "id": data.get("session_id") or data.get("id"),
             "pid": data.get("pid"),
             "hip": data.get("hip"),
             "build": data.get("build"),
             "label": data.get("label", ""),
             "alive": False,
+            "busy": False,
         }
         try:
+            # No session header here on purpose: discovery must survive a port
+            # that changed hands, and /api/identity no longer waits on the
+            # main thread, so a simulating Houdini still answers.
             ident = request(entry["url"], entry["token"], "/api/identity")
             live = ident.get("result", {})
-            entry.update({k: live[k] for k in ("hip", "build", "label", "pid") if live.get(k) is not None})
+            for k in ("hip", "build", "label", "pid", "id", "busy"):
+                if live.get(k) is not None:
+                    entry[k] = live[k]
             entry["alive"] = True
         except BridgeError:
             pass
@@ -107,6 +114,22 @@ def resolve(root: str | None, url: str | None, token: str | None,
     port = port or (int(env_port) if env_port else None)
 
     sessions = [s for s in list_sessions(root) if s["alive"]]
+
+    # An id/pid/scene name pins an *instance*; a port only names a door.
+    wanted = os.environ.get("CLAUDE_HOUDINI_SESSION", "").strip()
+    if wanted and port is None:
+        match = [s for s in sessions
+                 if wanted in (s.get("id") or "", str(s.get("pid") or ""))
+                 or wanted.lower() in os.path.basename(s.get("hip") or "").lower()]
+        if not match:
+            listing = "\n".join(
+                f"  {s.get('id') or '?':<14} port {s['port']}  {os.path.basename(s.get('hip') or '')}"
+                for s in sessions) or "  (none)"
+            raise BridgeError(
+                f"No live session matches CLAUDE_HOUDINI_SESSION={wanted!r}.\n"
+                f"Live now:\n{listing}")
+        return match[0]["url"].rstrip("/"), token or match[0]["token"]
+
     if port is not None:
         match = [s for s in sessions if s["port"] == port]
         if not match:
@@ -125,10 +148,13 @@ def resolve(root: str | None, url: str | None, token: str | None,
         )
     else:
         lines = "\n".join(
-            f"  --port {s['port']}  pid {s['pid']}  {s['label'] or ''}  {s['hip'] or ''}"
+            f"  --port {s['port']}   id {s.get('id') or '?':<14} pid {s['pid']}"
+            f"   {s['label'] or ''}  {s['hip'] or ''}"
             for s in sessions)
         raise BridgeError(
-            f"{len(sessions)} Houdini sessions are live - pick one with --port:\n{lines}")
+            f"{len(sessions)} Houdini sessions are live - pick one with --port,\n"
+            f"or pin this shell to one instance with CLAUDE_HOUDINI_SESSION=<id>:\n"
+            f"{lines}")
 
     return chosen["url"].rstrip("/"), token or chosen["token"]
 
@@ -136,7 +162,7 @@ def resolve(root: str | None, url: str | None, token: str | None,
 # ---------- transport ----------
 
 def request(url: str, token: str, path: str, body: dict | None = None,
-            params: dict | None = None) -> dict:
+            params: dict | None = None, session: str | None = None) -> dict:
     target = url + path
     if params:
         target += "?" + urllib.parse.urlencode(params)
@@ -144,6 +170,11 @@ def request(url: str, token: str, path: str, body: dict | None = None,
     data = json.dumps(body).encode("utf-8") if body is not None else None
     req = urllib.request.Request(target, data=data, method="POST" if data else "GET")
     req.add_header("Authorization", f"Bearer {token}")
+    # Pin the call to one Houdini: the server answers 409 rather than acting if
+    # this port has since been taken over by a different instance.
+    session = session or os.environ.get("CLAUDE_HOUDINI_SESSION", "").strip()
+    if session:
+        req.add_header("X-Nodus-Session", session)
     if data:
         req.add_header("Content-Type", "application/json")
 
@@ -156,6 +187,12 @@ def request(url: str, token: str, path: str, body: dict | None = None,
             raise BridgeError(
                 "401 unauthorized: the session file token is stale.\n"
                 "Houdini was probably restarted -- it rewrites the token on startup."
+            ) from e
+        if e.code == 409:
+            raise BridgeError(
+                "409 wrong session: this port now belongs to a different "
+                "Houdini than the one you pinned.\n"
+                f"{detail}\nRun `hbridge.py sessions` and pick again."
             ) from e
         raise BridgeError(f"HTTP {e.code}: {detail}") from e
     except urllib.error.URLError as e:

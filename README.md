@@ -100,6 +100,7 @@ All optional environment variables:
 | `CLAUDE_HOUDINI_UNDO_GROUP` | `1` | Set to `0` to disable per-turn undo grouping |
 | `CLAUDE_HOUDINI_TOKEN` | — | Pin the bearer token instead of generating one per session |
 | `CLAUDE_HOUDINI_LABEL` | — | Label this session, so tooling can tell your Houdinis apart |
+| `CLAUDE_HOUDINI_SESSION` | — | Pin this client to one instance by id; other instances answer 409 |
 
 ## Backends
 
@@ -159,9 +160,28 @@ taken, the server moves to 8752–8759 (8743–8751 are left free for pinned
 instances). Setting `CLAUDE_HOUDINI_PORT` disables the fallback: a pinned port
 is exact.
 
-`GET /api/identity` says who a session is: `{pid, port, hip, build, label,
-started}`. **Automated tooling should call identity before mutating anything**
-when several Houdinis may be open.
+Each instance also mints a **session id** (`h22-54024`: Houdini major version +
+PID) that is stable for the life of that process and independent of the port.
+It is stamped into the window title, so the taskbar answers "which window is
+this?", and `GET /api/identity` reports `{id, pid, port, hip, build, label,
+busy}`.
+
+**Why an id and not just the port**: a port is an address, not an identity.
+Close Houdini and the next one may bind the same number, so an agent that
+remembered "port 8742" would happily write into a different scene. Send the id
+in an `X-Nodus-Session` header (or set `CLAUDE_HOUDINI_SESSION`) and the bridge
+answers **409 wrong_session** instead of acting, which turns a silent
+catastrophe into an error message.
+
+```powershell
+$env:CLAUDE_HOUDINI_SESSION = "h22-54024"   # this shell now only talks to that Houdini
+python tools/hbridge.py scene               # 409 if it is gone
+```
+
+`/api/identity` never touches Houdini's main thread — it answers from cached
+facts. A Houdini in the middle of a simulation still says who it is instead of
+timing out and stalling discovery for everyone else. When the main thread has
+been unresponsive for a while, identity reports `busy: true`.
 
 ## Driving it from an external terminal (`hbridge.py`)
 

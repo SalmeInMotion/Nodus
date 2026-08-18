@@ -29,7 +29,18 @@ _server_thread: threading.Thread | None = None
 _token: str | None = None
 _port: int | None = None          # the port actually bound (fallback may move it)
 _started_at: str | None = None
+_session_id: str | None = None
 _lock = threading.Lock()
+
+# Scene facts cached so /api/identity never waits on the main thread.
+_hip: str | None = None
+_build: str | None = None
+_last_main_thread_ok: float = 0.0
+
+# Clients may pin themselves to one instance with this header; a mismatch is
+# refused rather than silently served, so a recycled port cannot redirect an
+# agent into someone else's scene.
+SESSION_HEADER = "X-Nodus-Session"
 
 # When the default port is taken (another Houdini got there first), these are
 # tried in order. 8743-8751 are deliberately absent: they are reserved for
@@ -71,22 +82,78 @@ def session_label() -> str:
     return ""
 
 
-def identity() -> dict:
-    """Who this session is. Cheap enough to call before every mutating batch."""
+def session_id() -> str:
+    """Stable name for THIS Houdini process, independent of the port.
+
+    A port is an address, not an identity: close Houdini and the next one may
+    bind the same number, so a client that remembered "port 8742" would happily
+    write into a different scene. This id is minted once per process and never
+    changes, so clients can pin to an instance and detect a swap.
+    """
+    global _session_id
+    if _session_id is None:
+        build = ""
+        try:
+            import hou
+            build = hou.applicationVersionString().split(".")[0]
+        except Exception:
+            pass
+        _session_id = f"h{build or '?'}-{os.getpid()}"
+    return _session_id
+
+
+def _refresh_scene_facts() -> None:
+    """Cache hip/build. MUST run on the main thread (touches hou)."""
+    global _hip, _build
     try:
         import hou
-        hip = hou.hipFile.path()
-        build = hou.applicationVersionString()
+        _hip = hou.hipFile.path()
+        _build = hou.applicationVersionString()
     except Exception:
-        hip, build = None, None
+        pass
+
+
+def identity() -> dict:
+    """Who this session is — answered WITHOUT touching the main thread.
+
+    `hou.hipFile.path()` has to run on Houdini's main thread, so asking a
+    simulating Houdini who it is used to block until the sim let go, and
+    discovery across several instances timed out. The facts are cached at
+    startup and refreshed opportunistically instead; a slightly stale hip name
+    beats a bridge that cannot answer at all.
+    """
     return {
+        "id": session_id(),
         "pid": os.getpid(),
         "port": port(),
-        "hip": hip,
-        "build": build,
+        "hip": _hip,
+        "build": _build,
         "label": session_label(),
         "started": _started_at,
+        "busy": _main_thread_busy(),
     }
+
+
+def _main_thread_busy() -> bool:
+    """Whether the main thread has gone quiet since the last real call.
+
+    Advisory only, and never blocking: it lets a client see "this Houdini is
+    mid-simulation" instead of inferring it from a timeout.
+    """
+    if not _last_main_thread_ok:
+        return False
+    return (time.monotonic() - _last_main_thread_ok) > 30.0
+
+
+def _note_main_thread_alive() -> None:
+    """Called after any successful main-thread hop; also refreshes the hip."""
+    global _last_main_thread_ok
+    _last_main_thread_ok = time.monotonic()
+    try:
+        import hou
+        globals()["_hip"] = hou.hipFile.path()
+    except Exception:
+        pass
 
 
 def session_file() -> Path:
@@ -142,6 +209,7 @@ def _publish_session(token: str) -> None:
         payload.update({
             "url": base_url(),
             "token": token,
+            "session_id": session_id(),
         })
         text = json.dumps(payload, indent=2)
         _prune_stale_sessions()
@@ -207,6 +275,8 @@ def start() -> tuple[str, str]:
         )
         _server_thread.start()
         _started_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+        session_id()          # mint it now, while we know the build
+        _refresh_scene_facts()  # start() runs on the main thread
         _publish_session(token)
         return base_url(), token
 
@@ -347,16 +417,39 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _check_session(self) -> bool:
+        """Refuse if the client pinned itself to a different instance."""
+        wanted = self.headers.get(SESSION_HEADER, "").strip()
+        if not wanted or wanted == session_id():
+            return True
+        self._send_json(409, {
+            "error": "wrong_session",
+            "expected": wanted,
+            "actual": session_id(),
+            "hip": _hip,
+            "message": ("This port now belongs to a different Houdini. "
+                        "Re-discover the sessions instead of reusing the port."),
+        })
+        return False
+
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         # /api/ping is intentionally unauthenticated for diagnostics from
         # the Houdini Python Shell or external curl.
         if parsed.path == "/api/ping":
-            self._send_json(200, {"ok": True, "service": "claude-houdini"})
+            self._send_json(200, {"ok": True, "service": "nodus",
+                                  "id": session_id()})
             return
 
         if not self._check_auth():
             self._send_json(401, {"error": "unauthorized"})
+            return
+        if not self._check_session():
+            return
+
+        # Answered from cached facts: never queue behind a busy main thread.
+        if parsed.path == "/api/identity":
+            self._send_json(200, {"ok": True, "result": identity()})
             return
 
         handler = _READ_ROUTES.get(parsed.path)
@@ -367,6 +460,7 @@ class _Handler(BaseHTTPRequestHandler):
         q = {k: v[0] for k, v in parse_qs(parsed.query).items()}
         try:
             result = hdefereval.executeInMainThreadWithResult(handler, q)
+            _note_main_thread_alive()
             self._send_json(200, {"ok": True, "result": result})
         except KeyError as e:
             self._send_json(400, {"error": f"missing parameter: {e.args[0]}"})
@@ -378,6 +472,9 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         if not self._check_auth():
             self._send_json(401, {"error": "unauthorized"})
+            return
+        # Matters most here: this is where the scene gets written to.
+        if not self._check_session():
             return
 
         parsed = urlparse(self.path)
@@ -424,6 +521,7 @@ class _Handler(BaseHTTPRequestHandler):
 
         try:
             result = hdefereval.executeInMainThreadWithResult(handler, body)
+            _note_main_thread_alive()
             self._send_json(200, {"ok": True, "result": result})
         except KeyError as e:
             self._send_json(400, {"error": f"missing field: {e.args[0]}"})

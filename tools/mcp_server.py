@@ -43,17 +43,20 @@ mcp = MCPServer(
 
 
 def _call(port: int, api_path: str, params: dict | None = None,
-          body: dict | None = None) -> Any:
+          body: dict | None = None, session: str = "") -> Any:
     url, token = hbridge.resolve(None, None, None, port or None)
     return hbridge._unwrap(hbridge.request(url, token, api_path,
-                                           body=body, params=params))
+                                           body=body, params=params,
+                                           session=session or None))
 
 
 @mcp.tool()
 def houdini_sessions() -> list[dict]:
-    """List every running Houdini bridge session (port, pid, hip file, build,
-    label, alive). Call this first when unsure which Houdini to talk to; pass
-    the chosen port to the other tools."""
+    """List every running Houdini bridge session: id, port, pid, hip file,
+    build, label, alive, busy. Call this FIRST when several Houdinis may be
+    open, then pass the chosen `port` to every other tool in that task — and
+    `session` too if you want the call refused (409) rather than executed
+    should that port have changed hands."""
     rows = hbridge.list_sessions(None)
     for row in rows:
         row.pop("token", None)  # clients need the port, never the secret
@@ -123,7 +126,7 @@ def houdini_screenshot(what: str = "viewport", node_path: str = "",
 @mcp.tool()
 def houdini_create_node(parent: str, node_type: str, name: str = "",
                         set_parms: dict | None = None,
-                        port: int = 0) -> dict:
+                        port: int = 0, session: str = "") -> dict:
     """Create a node (e.g. parent="/obj", node_type="geo"). Optionally set
     parameters in the same call via set_parms {parm: value}."""
     body: dict = {"parent": parent, "type": node_type}
@@ -131,46 +134,46 @@ def houdini_create_node(parent: str, node_type: str, name: str = "",
         body["name"] = name
     if set_parms:
         body["set_parms"] = set_parms
-    return _call(port, "/api/create_node", body=body)
+    return _call(port, "/api/create_node", session=session, body=body)
 
 
 @mcp.tool()
 def houdini_set_parm(path: str, parm: str, value: Any,
-                     as_expression: bool = False, port: int = 0) -> dict:
+                     as_expression: bool = False, port: int = 0, session: str = "") -> dict:
     """Set one parameter. as_expression=True stores the value as an hscript
     expression instead of a literal."""
-    return _call(port, "/api/set_parm", body={
+    return _call(port, "/api/set_parm", session=session, body={
         "path": path, "parm": parm, "value": value,
         "as_expression": as_expression})
 
 
 @mcp.tool()
 def houdini_connect(from_path: str, to_path: str, from_output: int = 0,
-                    to_input: int = 0, port: int = 0) -> dict:
+                    to_input: int = 0, port: int = 0, session: str = "") -> dict:
     """Wire from_path's output into to_path's input."""
-    return _call(port, "/api/connect", body={
+    return _call(port, "/api/connect", session=session, body={
         "from_path": from_path, "from_output": from_output,
         "to_path": to_path, "to_input": to_input})
 
 
 @mcp.tool()
-def houdini_delete_node(path: str, port: int = 0) -> dict:
+def houdini_delete_node(path: str, port: int = 0, session: str = "") -> dict:
     """Delete a node. Confirmed by the user inside Houdini unless auto mode."""
-    return _call(port, "/api/delete_node", body={"path": path})
+    return _call(port, "/api/delete_node", session=session, body={"path": path})
 
 
 @mcp.tool()
-def houdini_layout(path: str, port: int = 0) -> dict:
+def houdini_layout(path: str, port: int = 0, session: str = "") -> dict:
     """Tidy the layout of a network's children (cosmetic, no confirmation)."""
-    return _call(port, "/api/layout", body={"path": path})
+    return _call(port, "/api/layout", session=session, body={"path": path})
 
 
 @mcp.tool()
-def houdini_run_python(code: str, port: int = 0) -> dict:
+def houdini_run_python(code: str, port: int = 0, session: str = "") -> dict:
     """Escape hatch: run arbitrary Python inside the Houdini session (full hou
     access, main thread). Returns {stdout, result, error}. Use the typed tools
     when one fits; use this for everything they do not cover."""
-    return _call(port, "/api/run_python", body={"code": code})
+    return _call(port, "/api/run_python", session=session, body={"code": code})
 
 
 @mcp.tool()
